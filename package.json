@@ -1,0 +1,19 @@
+{
+  "name": "volumetrica-trading-extension",
+  "version": "1.0.0",
+  "description": "Ultra-lean trading extension for Volumetrica",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "proto": "node compile-proto.js",
+    "install-proto": "npm install protobufjs",
+    "dev": "npm run build && echo 'Load dist/ folder in Chrome extensions'"
+  },
+  "dependencies": {
+    "protobufjs": "^7.2.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.19.11",
+    "protobufjs-cli": "^1.1.3"
+  }
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Extension</title>
+    <style>
+        body { width: 400px; padding: 20px; font-family: Arial; }
+        button { margin: 10px 0; padding: 10px; width: 100%; }
+        pre { background: #f0f0f0; padding: 10px; overflow: auto; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h2>Debug Extension Test</h2>
+    
+    <button id="testDirect">1. Test Direct API Call</button>
+    <button id="testProxy">2. Test Proxy Call</button>
+    <button id="testBackground">3. Test Background Script</button>
+    
+    <h3>Results:</h3>
+    <pre id="output">Click a button to test...</pre>
+    
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, isError = false) {
+            output.innerHTML += `<span class="${isError ? 'error' : ''}">${message}\n</span>`;
+        }
+        
+        // Test 1: Direct API call (will fail due to CORS)
+        document.getElementById('testDirect').addEventListener('click', async () => {
+            output.innerHTML = 'Testing direct API call...\n';
+            try {
+                const response = await fetch('https://authdxfeed.volumetricatrading.com/api/v2/auth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'PltfKey': 'URAp7b9wbmUCr0J7IieMaUoIe60ixtgchejOWjFJeQi7jrAlSfQNuyaDebgloot5'
+                    },
+                    body: JSON.stringify({
+                        login: 'quickstepshoes@traders_launch.com',
+                        password: 'mQ1JRp8Ma1!',
+                        version: 3,
+                        platform: 0,
+                        environment: 0,
+                        connectOnlyTrading: true
+                    })
+                });
+                log('Response: ' + response.status);
+            } catch (error) {
+                log('Expected CORS error: ' + error.message, true);
+            }
+        });
+        
+        // Test 2: Proxy call
+        document.getElementById('testProxy').addEventListener('click', async () => {
+            output.innerHTML = 'Testing proxy call...\n';
+            try {
+                log('Calling: http://localhost:3001/api/v2/auth/token');
+                const response = await fetch('http://localhost:3001/api/v2/auth/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'PltfKey': 'URAp7b9wbmUCr0J7IieMaUoIe60ixtgchejOWjFJeQi7jrAlSfQNuyaDebgloot5'
+                    },
+                    body: JSON.stringify({
+                        login: 'quickstepshoes@traders_launch.com',
+                        password: 'mQ1JRp8Ma1!',
+                        version: 3,
+                        platform: 0,
+                        environment: 0,
+                        connectOnlyTrading: true
+                    })
+                });
+                const data = await response.json();
+                log('Success! Status: ' + response.status, false);
+                log('Response: ' + JSON.stringify(data, null, 2), false);
+            } catch (error) {
+                log('Error: ' + error.message, true);
+            }
+        });
+        
+        // Test 3: Background script message
+        document.getElementById('testBackground').addEventListener('click', async () => {
+            output.innerHTML = 'Testing background script...\n';
+            try {
+                log('Sending connect message to background...');
+                const response = await chrome.runtime.sendMessage({
+                    type: 'connect',
+                    username: 'quickstepshoes@traders_launch.com',
+                    password: 'mQ1JRp8Ma1!'
+                });
+                log('Background response: ' + JSON.stringify(response, null, 2));
+            } catch (error) {
+                log('Error: ' + error.message, true);
+            }
+        });
+    </script>
+</body>
+</html>

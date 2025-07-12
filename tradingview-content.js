@@ -29,18 +29,14 @@ function hijackTradeButton() {
       target.closest('button')?.textContent?.includes('Trade');
     
     if (isTradeButton) {
-      console.log('Trade button clicked, showing Volumetrica widget');
+      console.log('Trade button clicked, toggling Volumetrica widget');
       e.preventDefault();
       e.stopPropagation();
       
-      // Show our widget instead
+      // Toggle our widget
       const widget = document.getElementById('volumetrica-widget');
       if (widget) {
-        if (widget.style.transform === 'translateX(0)') {
-          hideWidget();
-        } else {
-          showWidget();
-        }
+        toggleWidget();
       }
     }
   }, true); // Use capture phase
@@ -134,10 +130,6 @@ function createTradingWidget() {
       const newWidth = window.innerWidth - e.clientX;
       if (newWidth >= 240 && newWidth <= 600) {
         widgetContainer.style.width = newWidth + 'px';
-        // Adjust chart width in real-time while resizing
-        if (widgetContainer.style.transform === 'translateX(0)') {
-          adjustChartWidth();
-        }
       }
     }
   });
@@ -162,89 +154,29 @@ function createTradingWidget() {
   // Function to show widget
   showWidget = function() {
     widgetContainer.style.display = 'block';
-    document.body.classList.add('volumetrica-widget-open');
     setTimeout(() => {
       widgetContainer.style.transform = 'translateX(0)';
-      adjustChartWidth();
       updateWidgetSymbol();
-      
-      // Force TradingView to recalculate layout
-      window.dispatchEvent(new Event('resize'));
     }, 10);
   }
   
   // Function to hide widget
   hideWidget = function() {
     widgetContainer.style.transform = 'translateX(100%)';
-    document.body.classList.remove('volumetrica-widget-open');
     setTimeout(() => {
       widgetContainer.style.display = 'none';
-      resetChartWidth();
-      
-      // Force TradingView to recalculate layout
-      window.dispatchEvent(new Event('resize'));
     }, 300);
   }
   
-  // Adjust chart width when widget opens
-  function adjustChartWidth() {
-    // TradingView uses multiple containers that need to be adjusted
-    const selectors = [
-      '.chart-container',
-      '[class*="chart-widget"]',
-      '.layout__area--center',
-      '[class*="chart-markup-table"]',
-      '.chart-gui-wrapper',
-      'div[data-role="toast-container"]',
-      '.layout__area--top',
-      '[class*="overflowWrap"]'
-    ];
-    
-    selectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(element => {
-        if (element) {
-          element.style.transition = 'all 0.3s ease';
-          element.style.marginRight = widgetContainer.style.width;
-        }
-      });
-    });
-    
-    // Also adjust the main content area
-    const mainContent = document.querySelector('.tv-main') || document.querySelector('[class*="body"]');
-    if (mainContent) {
-      mainContent.style.paddingRight = widgetContainer.style.width;
-      mainContent.style.transition = 'padding-right 0.3s ease';
+  // Toggle widget
+  function toggleWidget() {
+    if (widgetContainer.style.transform === 'translateX(0)') {
+      hideWidget();
+    } else {
+      showWidget();
     }
   }
   
-  // Reset chart width when widget closes
-  function resetChartWidth() {
-    const selectors = [
-      '.chart-container',
-      '[class*="chart-widget"]',
-      '.layout__area--center',
-      '[class*="chart-markup-table"]',
-      '.chart-gui-wrapper',
-      'div[data-role="toast-container"]',
-      '.layout__area--top',
-      '[class*="overflowWrap"]'
-    ];
-    
-    selectors.forEach(selector => {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(element => {
-        if (element) {
-          element.style.marginRight = '0';
-        }
-      });
-    });
-    
-    const mainContent = document.querySelector('.tv-main') || document.querySelector('[class*="body"]');
-    if (mainContent) {
-      mainContent.style.paddingRight = '0';
-    }
-  }
   
   // Listen for messages from extension
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -328,51 +260,19 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     createTradingWidget();
     monitorPriceUpdates();
-    injectLayoutStyles();
   });
 } else {
   createTradingWidget();
   monitorPriceUpdates();
-  injectLayoutStyles();
 }
 
-// Inject styles to handle TradingView layout
-function injectLayoutStyles() {
-  const style = document.createElement('style');
-  style.textContent = `
-    /* When widget is open, adjust TradingView's layout */
-    body.volumetrica-widget-open .layout__area--center,
-    body.volumetrica-widget-open [class*="chart-container"],
-    body.volumetrica-widget-open .tv-chart-container,
-    body.volumetrica-widget-open [class*="chart-widget"] {
-      margin-right: 320px !important;
-      transition: margin-right 0.3s ease !important;
-    }
-    
-    /* Ensure the chart resizes properly */
-    body.volumetrica-widget-open .chart-gui-wrapper {
-      width: calc(100% - 320px) !important;
-    }
-    
-    /* Fix any overflow issues */
-    body.volumetrica-widget-open {
-      overflow-x: hidden !important;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-// Add keyboard shortcut to toggle widget (Ctrl/Cmd + Shift + V)
+// Add keyboard shortcut to toggle widget (Ctrl/Cmd + B)
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+    e.preventDefault();
     const widget = document.getElementById('volumetrica-widget');
     if (widget) {
-      if (widget.style.display === 'none') {
-        widget.style.display = 'block';
-        updateWidgetSymbol();
-      } else {
-        widget.style.display = 'none';
-      }
+      toggleWidget();
     }
   }
 });

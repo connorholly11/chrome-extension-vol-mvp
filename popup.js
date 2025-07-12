@@ -15,7 +15,7 @@ const passwordInput = document.getElementById('password');
 const tabs = document.querySelectorAll('.tab');
 const standardView = document.getElementById('standardView');
 const tradingviewView = document.getElementById('tradingviewView');
-const openTradingViewBtn = document.getElementById('openTradingViewBtn');
+const activateTradingViewBtn = document.getElementById('activateTradingViewBtn');
 
 // Tab switching
 tabs.forEach(tab => {
@@ -37,17 +37,18 @@ tabs.forEach(tab => {
   });
 });
 
-// Open TradingView widget button
-openTradingViewBtn.addEventListener('click', async () => {
-  // Open TradingView in a new tab
-  const tab = await chrome.tabs.create({ url: 'https://www.tradingview.com/chart/' });
+// Activate TradingView widget button
+activateTradingViewBtn.addEventListener('click', async () => {
+  // Get the current active tab
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  // Wait a moment for the page to load, then show the widget
-  setTimeout(() => {
-    chrome.tabs.sendMessage(tab.id, { type: 'show-widget' });
-  }, 3000);
-  
-  window.close();
+  if (activeTab.url && activeTab.url.includes('tradingview.com')) {
+    // Send message to show widget on current tab
+    chrome.tabs.sendMessage(activeTab.id, { type: 'show-widget' });
+    window.close();
+  } else {
+    alert('Please navigate to TradingView.com first');
+  }
 });
 
 // Info display elements

@@ -1,59 +1,12 @@
 // Content script for TradingView integration
 console.log('Volumetrica TradingView content script loaded');
 
-// Add a visual indicator that our extension is active
+// Wait for page to load, then initialize
 setTimeout(() => {
-  console.log('Checking for Volumetrica widget...');
-  const widget = document.getElementById('volumetrica-widget');
-  if (widget) {
-    console.log('Volumetrica widget found and should be visible');
-  } else {
-    console.log('Widget not found, creating now...');
-    createTradingWidget();
-  }
-  
-  // Try to hijack TradingView's Trade button
-  hijackTradeButton();
-}, 1000);
-
-// Function to replace TradingView's trade button functionality
-function hijackTradeButton() {
-  // Watch for trade button clicks
-  document.addEventListener('click', (e) => {
-    // Check if clicked element is a trade button
-    const target = e.target;
-    const isTradeButton = 
-      target.textContent?.includes('Trade') ||
-      target.getAttribute('data-name')?.includes('trade') ||
-      target.closest('[data-name*="trade"]') ||
-      target.closest('button')?.textContent?.includes('Trade');
-    
-    if (isTradeButton) {
-      console.log('Trade button clicked, toggling Volumetrica widget');
-      e.preventDefault();
-      e.stopPropagation();
-      
-      // Toggle our widget
-      const widget = document.getElementById('volumetrica-widget');
-      if (widget) {
-        toggleWidget();
-      }
-    }
-  }, true); // Use capture phase
-}
-
-// Also monitor for TradingView's native panel
-setInterval(() => {
-  // Hide TradingView's native trading panel if it appears
-  const nativePanels = document.querySelectorAll('[data-name="trading-panel"], [class*="tradingPanel"], [class*="broker-widget"]');
-  nativePanels.forEach(panel => {
-    if (panel && !panel.hasAttribute('data-hidden-by-volumetrica')) {
-      panel.style.display = 'none';
-      panel.setAttribute('data-hidden-by-volumetrica', 'true');
-      console.log('Hidden native TradingView panel');
-    }
-  });
-}, 1000);
+  console.log('Initializing Volumetrica extension...');
+  createTradingWidget();
+  createFloatingButton();
+}, 2000);
 
 let widgetFrame = null;
 let isDragging = false;
@@ -61,6 +14,52 @@ let dragOffset = { x: 0, y: 0 };
 
 // Declare functions before they're used
 let showWidget, hideWidget;
+
+// Function to create floating button
+function createFloatingButton() {
+  // Check if button already exists
+  if (document.getElementById('volumetrica-floating-btn')) {
+    return;
+  }
+  
+  const floatingBtn = document.createElement('button');
+  floatingBtn.id = 'volumetrica-floating-btn';
+  floatingBtn.innerHTML = '📊';
+  floatingBtn.title = 'Open Volumetrica Trading Panel (Ctrl+B)';
+  floatingBtn.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: #2962ff;
+    color: white;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    z-index: 9998;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
+  `;
+  
+  floatingBtn.addEventListener('mouseenter', () => {
+    floatingBtn.style.transform = 'scale(1.1)';
+  });
+  
+  floatingBtn.addEventListener('mouseleave', () => {
+    floatingBtn.style.transform = 'scale(1)';
+  });
+  
+  floatingBtn.addEventListener('click', () => {
+    const widget = document.getElementById('volumetrica-widget');
+    if (widget) {
+      toggleWidget();
+    }
+  });
+  
+  document.body.appendChild(floatingBtn);
+}
 
 // Function to create and inject the trading widget
 function createTradingWidget() {
@@ -180,12 +179,12 @@ function createTradingWidget() {
   
   // Listen for messages from extension
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === 'toggle-widget' || request.type === 'show-widget') {
-      if (widgetContainer.style.transform === 'translateX(100%)' || widgetContainer.style.display === 'none') {
-        showWidget();
-      } else {
-        hideWidget();
-      }
+    if (request.type === 'show-widget') {
+      showWidget();
+      sendResponse({ success: true });
+    } else if (request.type === 'toggle-widget') {
+      toggleWidget();
+      sendResponse({ success: true });
     }
   });
 }

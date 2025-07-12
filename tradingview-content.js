@@ -11,11 +11,60 @@ setTimeout(() => {
     console.log('Widget not found, creating now...');
     createTradingWidget();
   }
+  
+  // Try to hijack TradingView's Trade button
+  hijackTradeButton();
+}, 1000);
+
+// Function to replace TradingView's trade button functionality
+function hijackTradeButton() {
+  // Watch for trade button clicks
+  document.addEventListener('click', (e) => {
+    // Check if clicked element is a trade button
+    const target = e.target;
+    const isTradeButton = 
+      target.textContent?.includes('Trade') ||
+      target.getAttribute('data-name')?.includes('trade') ||
+      target.closest('[data-name*="trade"]') ||
+      target.closest('button')?.textContent?.includes('Trade');
+    
+    if (isTradeButton) {
+      console.log('Trade button clicked, showing Volumetrica widget');
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Show our widget instead
+      const widget = document.getElementById('volumetrica-widget');
+      if (widget) {
+        if (widget.style.transform === 'translateX(0)') {
+          hideWidget();
+        } else {
+          showWidget();
+        }
+      }
+    }
+  }, true); // Use capture phase
+}
+
+// Also monitor for TradingView's native panel
+setInterval(() => {
+  // Hide TradingView's native trading panel if it appears
+  const nativePanels = document.querySelectorAll('[data-name="trading-panel"], [class*="tradingPanel"], [class*="broker-widget"]');
+  nativePanels.forEach(panel => {
+    if (panel && !panel.hasAttribute('data-hidden-by-volumetrica')) {
+      panel.style.display = 'none';
+      panel.setAttribute('data-hidden-by-volumetrica', 'true');
+      console.log('Hidden native TradingView panel');
+    }
+  });
 }, 1000);
 
 let widgetFrame = null;
 let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
+
+// Declare functions before they're used
+let showWidget, hideWidget;
 
 // Function to create and inject the trading widget
 function createTradingWidget() {
@@ -29,15 +78,17 @@ function createTradingWidget() {
   widgetContainer.id = 'volumetrica-widget';
   widgetContainer.style.cssText = `
     position: fixed;
-    top: 100px;
-    right: 20px;
-    width: 240px;
-    height: 600px;
-    z-index: 10000;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-    border-radius: 4px;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100vh;
+    z-index: 9999;
+    background: #1e222d;
+    border-left: 1px solid #2a2e39;
     overflow: hidden;
-    display: block;
+    display: none;
+    transition: transform 0.3s ease;
+    transform: translateX(100%);
   `;
   
   // Create iframe for the widget
@@ -50,40 +101,48 @@ function createTradingWidget() {
   `;
   widgetFrame = iframe;
   
-  // Create drag handle
-  const dragHandle = document.createElement('div');
-  dragHandle.style.cssText = `
+  // Create resize handle
+  const resizeHandle = document.createElement('div');
+  resizeHandle.style.cssText = `
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
-    height: 40px;
-    cursor: move;
-    z-index: 1;
+    width: 4px;
+    height: 100%;
+    cursor: ew-resize;
+    background: transparent;
+    z-index: 10;
   `;
   
-  // Drag functionality
-  dragHandle.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    const rect = widgetContainer.getBoundingClientRect();
-    dragOffset.x = e.clientX - rect.left;
-    dragOffset.y = e.clientY - rect.top;
+  resizeHandle.addEventListener('mouseenter', () => {
+    resizeHandle.style.background = '#2962ff';
+  });
+  
+  resizeHandle.addEventListener('mouseleave', () => {
+    resizeHandle.style.background = 'transparent';
+  });
+  
+  // Resize functionality
+  let isResizing = false;
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true;
     e.preventDefault();
   });
   
   document.addEventListener('mousemove', (e) => {
-    if (isDragging) {
-      widgetContainer.style.left = (e.clientX - dragOffset.x) + 'px';
-      widgetContainer.style.top = (e.clientY - dragOffset.y) + 'px';
-      widgetContainer.style.right = 'auto';
+    if (isResizing) {
+      const newWidth = window.innerWidth - e.clientX;
+      if (newWidth >= 240 && newWidth <= 600) {
+        widgetContainer.style.width = newWidth + 'px';
+      }
     }
   });
   
   document.addEventListener('mouseup', () => {
-    isDragging = false;
+    isResizing = false;
   });
   
-  widgetContainer.appendChild(dragHandle);
+  widgetContainer.appendChild(resizeHandle);
   widgetContainer.appendChild(iframe);
   document.body.appendChild(widgetContainer);
   
@@ -96,14 +155,49 @@ function createTradingWidget() {
     }
   });
   
+  // Function to show widget
+  showWidget = function() {
+    widgetContainer.style.display = 'block';
+    setTimeout(() => {
+      widgetContainer.style.transform = 'translateX(0)';
+      adjustChartWidth();
+      updateWidgetSymbol();
+    }, 10);
+  }
+  
+  // Function to hide widget
+  hideWidget = function() {
+    widgetContainer.style.transform = 'translateX(100%)';
+    setTimeout(() => {
+      widgetContainer.style.display = 'none';
+      resetChartWidth();
+    }, 300);
+  }
+  
+  // Adjust chart width when widget opens
+  function adjustChartWidth() {
+    const chart = document.querySelector('.chart-container, [class*="chart"], #main-content');
+    if (chart) {
+      chart.style.marginRight = widgetContainer.style.width;
+      chart.style.transition = 'margin-right 0.3s ease';
+    }
+  }
+  
+  // Reset chart width when widget closes
+  function resetChartWidth() {
+    const chart = document.querySelector('.chart-container, [class*="chart"], #main-content');
+    if (chart) {
+      chart.style.marginRight = '0';
+    }
+  }
+  
   // Listen for messages from extension
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === 'toggle-widget') {
-      if (widgetContainer.style.display === 'none') {
-        widgetContainer.style.display = 'block';
-        updateWidgetSymbol();
+    if (request.type === 'toggle-widget' || request.type === 'show-widget') {
+      if (widgetContainer.style.transform === 'translateX(100%)' || widgetContainer.style.display === 'none') {
+        showWidget();
       } else {
-        widgetContainer.style.display = 'none';
+        hideWidget();
       }
     }
   });

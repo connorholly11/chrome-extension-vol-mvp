@@ -9,12 +9,20 @@
       box-sizing: border-box;
     }
     
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    
     body {
-      width: 240px;
+      width: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background: #1e222d;
       color: #d1d4dc;
       font-size: 11px;
+      display: flex;
+      flex-direction: column;
     }
     
     .header {
@@ -130,6 +138,12 @@
     .order-type:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+    
+    .content-wrapper {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     
     .risk-section {
@@ -275,7 +289,8 @@
     <button class="tab" data-tab="dom">DOM</button>
   </div>
   
-  <div class="price-section">
+  <div class="content-wrapper">
+    <div class="price-section">
     <div class="symbol-info">
       <span class="symbol-label">Sell</span>
       <span class="symbol-label">Buy</span>
@@ -341,6 +356,7 @@
       Buy<br>
       25 AAPL MKT
     </button>
+  </div>
   </div>
   
   <script src="tradingview-widget.js"></script>

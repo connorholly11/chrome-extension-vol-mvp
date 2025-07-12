@@ -11,6 +11,48 @@ const quantityInput = document.getElementById('quantity');
 const usernameInput = document.getElementById('username');
 const passwordInput = document.getElementById('password');
 
+// Tab elements
+const tabs = document.querySelectorAll('.tab');
+const standardView = document.getElementById('standardView');
+const tradingviewView = document.getElementById('tradingviewView');
+const openTradingViewBtn = document.getElementById('openTradingViewBtn');
+
+// Tab switching
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    const tabName = tab.dataset.tab;
+    
+    // Update active tab
+    tabs.forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    
+    // Show/hide content
+    if (tabName === 'standard') {
+      standardView.classList.remove('hidden');
+      tradingviewView.classList.add('hidden');
+    } else {
+      standardView.classList.add('hidden');
+      tradingviewView.classList.remove('hidden');
+    }
+  });
+});
+
+// Open TradingView widget button
+openTradingViewBtn.addEventListener('click', async () => {
+  // Check if we're on TradingView
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+  if (activeTab.url && activeTab.url.includes('tradingview.com')) {
+    // Send message to content script to toggle widget
+    chrome.tabs.sendMessage(activeTab.id, { type: 'toggle-widget' });
+    window.close(); // Close popup
+  } else {
+    // Open TradingView in a new tab
+    chrome.tabs.create({ url: 'https://www.tradingview.com/chart/' });
+    window.close();
+  }
+});
+
 // Info display elements
 const balanceEl = document.getElementById('balance');
 const positionEl = document.getElementById('position');

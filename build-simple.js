@@ -23,7 +23,10 @@ const staticFiles = [
   'popup.html',
   'icon-16.png',
   'icon-48.png',
-  'icon-128.png'
+  'icon-128.png',
+  'tradingview-widget.html',
+  'tradingview-widget.js',
+  'tradingview-content.js'
 ];
 
 for (const file of staticFiles) {

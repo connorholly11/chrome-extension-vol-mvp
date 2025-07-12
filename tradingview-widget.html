@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      width: 240px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1e222d;
+      color: #d1d4dc;
+      font-size: 11px;
+    }
+    
+    .header {
+      background: #131722;
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #2a2e39;
+    }
+    
+    .header-title {
+      font-size: 12px;
+      font-weight: 500;
+    }
+    
+    .close-btn {
+      background: none;
+      border: none;
+      color: #787b86;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .close-btn:hover {
+      color: #d1d4dc;
+    }
+    
+    .tabs {
+      display: flex;
+      background: #131722;
+      border-bottom: 1px solid #2a2e39;
+    }
+    
+    .tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      background: none;
+      border: none;
+      color: #787b86;
+      font-size: 11px;
+      transition: all 0.2s;
+    }
+    
+    .tab.active {
+      color: #d1d4dc;
+      background: #1e222d;
+    }
+    
+    .price-section {
+      padding: 12px;
+      text-align: center;
+      border-bottom: 1px solid #2a2e39;
+    }
+    
+    .symbol-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 8px;
+    }
+    
+    .symbol-label {
+      color: #787b86;
+      font-size: 11px;
+    }
+    
+    .current-price {
+      font-size: 16px;
+      font-weight: 500;
+      color: #d1d4dc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .price-value {
+      color: #26a69a;
+    }
+    
+    .order-type-tabs {
+      display: flex;
+      padding: 0 12px;
+      margin-top: 12px;
+      gap: 4px;
+    }
+    
+    .order-type {
+      flex: 1;
+      padding: 6px;
+      text-align: center;
+      background: #2a2e39;
+      border: none;
+      color: #787b86;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    
+    .order-type.active {
+      background: #363a45;
+      color: #d1d4dc;
+    }
+    
+    .order-type:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .risk-section {
+      padding: 12px;
+    }
+    
+    .risk-label {
+      color: #787b86;
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+    
+    .shares-input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    
+    .shares-input {
+      flex: 1;
+      background: #2a2e39;
+      border: 1px solid #363a45;
+      color: #d1d4dc;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+    
+    .shares-input:focus {
+      outline: none;
+      border-color: #2962ff;
+    }
+    
+    .calculator-btn {
+      background: #2a2e39;
+      border: 1px solid #363a45;
+      color: #787b86;
+      padding: 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .risk-dropdown {
+      position: relative;
+      margin-left: 8px;
+    }
+    
+    .risk-dropdown-btn {
+      background: none;
+      border: none;
+      color: #787b86;
+      cursor: pointer;
+      font-size: 10px;
+    }
+    
+    .order-info {
+      background: #131722;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-size: 11px;
+    }
+    
+    .info-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .info-label {
+      color: #787b86;
+    }
+    
+    .info-value {
+      color: #d1d4dc;
+    }
+    
+    .buy-button {
+      width: 100%;
+      padding: 12px;
+      background: #2962ff;
+      border: none;
+      color: white;
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    
+    .buy-button:hover:not(:disabled) {
+      background: #1e53e4;
+    }
+    
+    .buy-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .sell-button {
+      background: #e91e63;
+    }
+    
+    .sell-button:hover:not(:disabled) {
+      background: #d81b60;
+    }
+    
+    /* DOM button styling */
+    .dom-btn {
+      background: #2a2e39;
+      border: 1px solid #363a45;
+      color: #787b86;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    
+    .dom-btn:hover {
+      background: #363a45;
+      color: #d1d4dc;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-title">AAPL, Paper Trading</span>
+    <button class="close-btn" id="closeBtn">×</button>
+  </div>
+  
+  <div class="tabs">
+    <button class="tab active" data-tab="order">Order</button>
+    <button class="tab" data-tab="dom">DOM</button>
+  </div>
+  
+  <div class="price-section">
+    <div class="symbol-info">
+      <span class="symbol-label">Sell</span>
+      <span class="symbol-label">Buy</span>
+    </div>
+    <div class="current-price">
+      <span>210.52</span>
+      <span style="color: #787b86;">0.04</span>
+      <span class="price-value">210.56</span>
+    </div>
+  </div>
+  
+  <div class="order-type-tabs">
+    <button class="order-type active">Market</button>
+    <button class="order-type" disabled>Limit</button>
+    <button class="order-type" disabled>Stop</button>
+  </div>
+  
+  <div class="risk-section">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <span class="risk-label">Shares</span>
+      <span class="risk-label" style="display: flex; align-items: center;">
+        % risk
+        <button class="risk-dropdown-btn">▼</button>
+      </span>
+    </div>
+    
+    <div class="shares-input-group">
+      <input type="number" class="shares-input" id="sharesInput" value="25" min="1">
+      <button class="calculator-btn">⊞</button>
+      <input type="number" class="shares-input" style="width: 80px;" placeholder="0.00" readonly>
+    </div>
+    
+    <div class="order-info">
+      <div class="info-row">
+        <span class="info-label">Margin</span>
+        <span class="info-value">10.53</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Rej.</span>
+        <span class="info-value">100,000.00</span>
+      </div>
+      <div class="info-row" style="font-size: 10px; color: #787b86;">
+        The order margin is the cash required to open a position, factoring in your account's leverage. Learn more
+      </div>
+    </div>
+    
+    <div class="order-info">
+      <div class="info-row">
+        <span class="info-label">Leverage</span>
+        <span class="info-value">500:1</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Tick value</span>
+        <span class="info-value">0.3 USD</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Trade value</span>
+        <span class="info-value">5,264.00 USD</span>
+      </div>
+    </div>
+    
+    <button class="buy-button" id="buyBtn">
+      Buy<br>
+      25 AAPL MKT
+    </button>
+  </div>
+  
+  <script src="tradingview-widget.js"></script>
+</body>
+</html>

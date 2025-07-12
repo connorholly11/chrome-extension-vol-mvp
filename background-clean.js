@@ -34,6 +34,26 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({ success: true });
       break;
       
+    case 'placeOrder':
+      // Handle order placement from TradingView widget
+      handlePlaceOrder(request.order)
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true; // Keep channel open for async response
+      
+    case 'sendOrder':
+      // Handle order from standard UI (legacy)
+      const order = {
+        symbol: request.symbol,
+        side: request.side === 'BUY' ? 'buy' : 'sell',
+        quantity: request.quantity,
+        orderType: 'market'
+      };
+      handlePlaceOrder(order)
+        .then(result => sendResponse(result))
+        .catch(error => sendResponse({ success: false, error: error.message }));
+      return true; // Keep channel open for async response
+      
     default:
       sendResponse({ success: false, error: 'Unknown message type' });
   }
@@ -96,6 +116,33 @@ function disconnect() {
   isConnected = false;
   wsEndpoint = null;
   wsToken = null;
+}
+
+async function handlePlaceOrder(order) {
+  console.log('Placing order:', order);
+  
+  if (!isConnected) {
+    throw new Error('Not connected to trading platform');
+  }
+  
+  // TODO: Implement actual order placement via WebSocket
+  // For now, just simulate success
+  console.log('Order details:', {
+    symbol: order.symbol,
+    side: order.side,
+    quantity: order.quantity,
+    type: order.orderType,
+    price: order.price
+  });
+  
+  // Simulate order placement delay
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  return {
+    success: true,
+    orderId: 'SIM-' + Date.now(),
+    message: `${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ MARKET`
+  };
 }
 
 console.log('Background service worker ready');

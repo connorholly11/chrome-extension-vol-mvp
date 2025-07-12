@@ -5,15 +5,7 @@ let orderSide = 'buy'; // 'buy' or 'sell'
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-  // Tab switching
-  const tabs = document.querySelectorAll('.tab');
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-      // TODO: Switch content based on tab
-    });
-  });
+  // No tab switching needed - only Order tab exists
   
   // Get sell button
   const sellBtn = document.getElementById('sellBtn');

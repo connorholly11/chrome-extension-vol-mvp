@@ -15,24 +15,29 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
   
-  // Close button
-  document.getElementById('closeBtn').addEventListener('click', () => {
-    if (window.parent !== window) {
-      // We're in an iframe, send message to parent
-      window.parent.postMessage({ type: 'close-widget' }, '*');
-    } else {
-      window.close();
-    }
+  // Get sell button
+  const sellBtn = document.getElementById('sellBtn');
+  
+  // Handle sell button clicks
+  sellBtn.addEventListener('click', async () => {
+    orderSide = 'sell';
+    handleOrder();
   });
   
   // Shares input
   const sharesInput = document.getElementById('sharesInput');
   const buyBtn = document.getElementById('buyBtn');
   
-  sharesInput.addEventListener('input', updateOrderButton);
+  sharesInput.addEventListener('input', updateOrderButtons);
   
   // Buy button
   buyBtn.addEventListener('click', async () => {
+    orderSide = 'buy';
+    handleOrder();
+  });
+  
+  // Common order handling function
+  async function handleOrder() {
     const shares = parseInt(sharesInput.value);
     if (!shares || shares <= 0) return;
     
@@ -49,8 +54,13 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     
+    const activeBtn = orderSide === 'buy' ? buyBtn : sellBtn;
+    const originalText = activeBtn.innerHTML;
+    
+    activeBtn.disabled = true;
+    sellBtn.disabled = true;
     buyBtn.disabled = true;
-    buyBtn.textContent = 'Placing order...';
+    activeBtn.textContent = 'Placing order...';
     
     try {
       // Send order to background script
@@ -66,10 +76,12 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       if (response.success) {
-        buyBtn.textContent = 'Order sent!';
+        activeBtn.textContent = 'Order sent!';
         console.log('Order placed:', response.message);
         setTimeout(() => {
-          updateOrderButton();
+          activeBtn.innerHTML = originalText;
+          updateOrderButtons();
+          sellBtn.disabled = false;
           buyBtn.disabled = false;
         }, 2000);
       } else {
@@ -77,14 +89,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (error) {
       console.error('Order error:', error);
-      buyBtn.textContent = 'Order failed';
+      activeBtn.textContent = 'Order failed';
       alert('Order failed: ' + error.message);
       setTimeout(() => {
-        updateOrderButton();
+        activeBtn.innerHTML = originalText;
+        updateOrderButtons();
+        sellBtn.disabled = false;
         buyBtn.disabled = false;
       }, 2000);
     }
-  });
+  }
   
   // Listen for price updates from TradingView page
   window.addEventListener('message', (event) => {
@@ -99,28 +113,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('symbol')) {
     currentSymbol = urlParams.get('symbol');
-    document.querySelector('.header-title').textContent = `${currentSymbol}, Paper Trading`;
-    updateOrderButton();
+    updateOrderButtons();
   }
 });
 
-function updateOrderButton() {
+function updateOrderButtons() {
   const sharesInput = document.getElementById('sharesInput');
   const buyBtn = document.getElementById('buyBtn');
+  const sellBtn = document.getElementById('sellBtn');
   const shares = sharesInput.value || 0;
   
-  if (orderSide === 'buy') {
-    buyBtn.className = 'buy-button';
-    buyBtn.innerHTML = `Buy<br>${shares} ${currentSymbol} MKT`;
-  } else {
-    buyBtn.className = 'buy-button sell-button';
-    buyBtn.innerHTML = `Sell<br>${shares} ${currentSymbol} MKT`;
-  }
+  buyBtn.innerHTML = `BUY<br><span style="font-size: 12px; font-weight: normal;">${shares} ${currentSymbol}</span>`;
+  sellBtn.innerHTML = `SELL<br><span style="font-size: 12px; font-weight: normal;">${shares} ${currentSymbol}</span>`;
 }
 
 function updatePriceDisplay() {
-  const priceElement = document.querySelector('.price-value');
-  if (priceElement) {
-    priceElement.textContent = currentPrice.toFixed(2);
+  const bidElement = document.querySelector('.bid');
+  const askElement = document.querySelector('.ask');
+  if (bidElement && askElement) {
+    // Simple spread calculation
+    const spread = 0.04;
+    bidElement.textContent = (currentPrice - spread/2).toFixed(2);
+    askElement.textContent = (currentPrice + spread/2).toFixed(2);
   }
 }

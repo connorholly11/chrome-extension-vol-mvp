@@ -18,9 +18,9 @@
     body {
       width: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1e222d;
+      background: #131722;
       color: #d1d4dc;
-      font-size: 11px;
+      font-size: 12px;
       display: flex;
       flex-direction: column;
     }
@@ -59,55 +59,76 @@
     
     .tabs {
       display: flex;
-      background: #131722;
-      border-bottom: 1px solid #2a2e39;
+      background: #1e222d;
+      padding: 0;
     }
     
     .tab {
       flex: 1;
-      padding: 10px;
+      padding: 12px;
       text-align: center;
       cursor: pointer;
       background: none;
       border: none;
+      border-bottom: 2px solid transparent;
       color: #787b86;
-      font-size: 11px;
+      font-size: 13px;
+      font-weight: 500;
       transition: all 0.2s;
     }
     
     .tab.active {
       color: #d1d4dc;
-      background: #1e222d;
+      background: #131722;
+      border-bottom-color: #2962ff;
     }
     
     .price-section {
-      padding: 12px;
-      text-align: center;
-      border-bottom: 1px solid #2a2e39;
+      padding: 16px;
+      background: #131722;
+      margin: 12px;
+      border-radius: 4px;
     }
     
     .symbol-info {
       display: flex;
       justify-content: space-between;
-      align-items: baseline;
-      margin-bottom: 8px;
+      align-items: center;
+      margin-bottom: 12px;
     }
     
     .symbol-label {
       color: #787b86;
       font-size: 11px;
+      text-transform: uppercase;
     }
     
     .current-price {
-      font-size: 16px;
-      font-weight: 500;
+      font-size: 20px;
+      font-weight: 600;
       color: #d1d4dc;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      gap: 12px;
     }
     
     .price-value {
+      color: #26a69a;
+    }
+    
+    .bid-ask {
+      display: flex;
+      justify-content: space-between;
+      font-size: 14px;
+      margin-top: 8px;
+    }
+    
+    .bid {
+      color: #f23645;
+    }
+    
+    .ask {
       color: #26a69a;
     }
     
@@ -231,34 +252,45 @@
       color: #d1d4dc;
     }
     
-    .buy-button {
-      width: 100%;
-      padding: 12px;
-      background: #2962ff;
+    .buy-sell-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 0 12px;
+      margin-top: 20px;
+    }
+    
+    .buy-button, .sell-button {
+      padding: 16px;
       border: none;
       color: white;
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       border-radius: 4px;
       cursor: pointer;
-      transition: background 0.2s;
+      transition: all 0.2s;
+      text-transform: uppercase;
+    }
+    
+    .buy-button {
+      background: #26a69a;
     }
     
     .buy-button:hover:not(:disabled) {
-      background: #1e53e4;
-    }
-    
-    .buy-button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      background: #22967f;
     }
     
     .sell-button {
-      background: #e91e63;
+      background: #f23645;
     }
     
     .sell-button:hover:not(:disabled) {
-      background: #d81b60;
+      background: #e91e2e;
+    }
+    
+    .buy-button:disabled, .sell-button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
     
     /* DOM button styling */
@@ -279,11 +311,6 @@
   </style>
 </head>
 <body>
-  <div class="header">
-    <span class="header-title">AAPL, Paper Trading</span>
-    <button class="close-btn" id="closeBtn">×</button>
-  </div>
-  
   <div class="tabs">
     <button class="tab active" data-tab="order">Order</button>
     <button class="tab" data-tab="dom">DOM</button>
@@ -291,16 +318,20 @@
   
   <div class="content-wrapper">
     <div class="price-section">
-    <div class="symbol-info">
-      <span class="symbol-label">Sell</span>
-      <span class="symbol-label">Buy</span>
+      <div class="symbol-info">
+        <span class="symbol-label">Market Price</span>
+      </div>
+      <div class="bid-ask">
+        <div>
+          <span class="bid">210.52</span>
+          <span style="color: #787b86; font-size: 11px; margin-left: 4px;">BID</span>
+        </div>
+        <div>
+          <span style="color: #787b86; font-size: 11px; margin-right: 4px;">ASK</span>
+          <span class="ask">210.56</span>
+        </div>
+      </div>
     </div>
-    <div class="current-price">
-      <span>210.52</span>
-      <span style="color: #787b86;">0.04</span>
-      <span class="price-value">210.56</span>
-    </div>
-  </div>
   
   <div class="order-type-tabs">
     <button class="order-type active">Market</button>
@@ -352,10 +383,16 @@
       </div>
     </div>
     
-    <button class="buy-button" id="buyBtn">
-      Buy<br>
-      25 AAPL MKT
-    </button>
+    <div class="buy-sell-buttons">
+      <button class="sell-button" id="sellBtn">
+        SELL<br>
+        <span style="font-size: 12px; font-weight: normal;">25 AAPL</span>
+      </button>
+      <button class="buy-button" id="buyBtn">
+        BUY<br>
+        <span style="font-size: 12px; font-weight: normal;">25 AAPL</span>
+      </button>
+    </div>
   </div>
   </div>
   

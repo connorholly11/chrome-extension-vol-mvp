@@ -83,7 +83,7 @@ function createTradingWidget() {
     width: 320px;
     height: 100vh;
     z-index: 9999;
-    background: #1e222d;
+    background: #131722;
     border-left: 1px solid #2a2e39;
     overflow: hidden;
     display: none;

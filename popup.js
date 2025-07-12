@@ -39,18 +39,15 @@ tabs.forEach(tab => {
 
 // Open TradingView widget button
 openTradingViewBtn.addEventListener('click', async () => {
-  // Check if we're on TradingView
-  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  // Open TradingView in a new tab
+  const tab = await chrome.tabs.create({ url: 'https://www.tradingview.com/chart/' });
   
-  if (activeTab.url && activeTab.url.includes('tradingview.com')) {
-    // Send message to content script to toggle widget
-    chrome.tabs.sendMessage(activeTab.id, { type: 'toggle-widget' });
-    window.close(); // Close popup
-  } else {
-    // Open TradingView in a new tab
-    chrome.tabs.create({ url: 'https://www.tradingview.com/chart/' });
-    window.close();
-  }
+  // Wait a moment for the page to load, then show the widget
+  setTimeout(() => {
+    chrome.tabs.sendMessage(tab.id, { type: 'show-widget' });
+  }, 3000);
+  
+  window.close();
 });
 
 // Info display elements

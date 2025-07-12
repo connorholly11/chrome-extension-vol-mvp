@@ -36,6 +36,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const shares = parseInt(sharesInput.value);
     if (!shares || shares <= 0) return;
     
+    // First check if we're connected
+    try {
+      const statusResponse = await chrome.runtime.sendMessage({ type: 'getStatus' });
+      if (!statusResponse.connected) {
+        alert('Please connect to Volumetrica first using the Standard tab');
+        return;
+      }
+    } catch (error) {
+      console.error('Status check error:', error);
+      alert('Extension error. Please reload the extension.');
+      return;
+    }
+    
     buyBtn.disabled = true;
     buyBtn.textContent = 'Placing order...';
     
@@ -53,7 +66,8 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       
       if (response.success) {
-        buyBtn.textContent = 'Order placed!';
+        buyBtn.textContent = 'Order sent!';
+        console.log('Order placed:', response.message);
         setTimeout(() => {
           updateOrderButton();
           buyBtn.disabled = false;
@@ -64,6 +78,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       console.error('Order error:', error);
       buyBtn.textContent = 'Order failed';
+      alert('Order failed: ' + error.message);
       setTimeout(() => {
         updateOrderButton();
         buyBtn.disabled = false;

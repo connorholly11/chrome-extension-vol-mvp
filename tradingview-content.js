@@ -1,5 +1,17 @@
 // Content script for TradingView integration
-console.log('TradingView content script loaded');
+console.log('Volumetrica TradingView content script loaded');
+
+// Add a visual indicator that our extension is active
+setTimeout(() => {
+  console.log('Checking for Volumetrica widget...');
+  const widget = document.getElementById('volumetrica-widget');
+  if (widget) {
+    console.log('Volumetrica widget found and should be visible');
+  } else {
+    console.log('Widget not found, creating now...');
+    createTradingWidget();
+  }
+}, 1000);
 
 let widgetFrame = null;
 let isDragging = false;
@@ -25,7 +37,7 @@ function createTradingWidget() {
     box-shadow: 0 2px 10px rgba(0,0,0,0.2);
     border-radius: 4px;
     overflow: hidden;
-    display: none;
+    display: block;
   `;
   
   // Create iframe for the widget

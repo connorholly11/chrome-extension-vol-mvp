@@ -5,6 +5,9 @@ let orderSide = 'buy'; // 'buy' or 'sell'
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  // Request initial symbol/price from parent window
+  window.parent.postMessage({ type: 'request-symbol' }, '*');
+  
   // No tab switching needed - only Order tab exists
   
   // Get sell button
@@ -92,12 +95,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
   
-  // Listen for price updates from TradingView page
+  // Listen for updates from TradingView page
   window.addEventListener('message', (event) => {
     if (event.data.type === 'price-update') {
       currentPrice = event.data.price;
       currentSymbol = event.data.symbol;
       updatePriceDisplay();
+      updateOrderButtons();
+    } else if (event.data.type === 'symbol-update') {
+      currentSymbol = event.data.symbol;
+      updateOrderButtons();
     }
   });
   

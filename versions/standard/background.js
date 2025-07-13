@@ -10,6 +10,7 @@ let wsEndpoint = null;
 let wsToken = null;
 let ws = null;
 let isConnected = false;
+let heartbeatInterval = null;
 
 // Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -93,9 +94,10 @@ async function handleConnect(username, password) {
       wsEndpoint = data.data.tradingWssEndpoint;
       wsToken = data.data.tradingWssToken;
       
-      // For now, just mark as connected without WebSocket
-      // TODO: Implement WebSocket connection with protobuf
+      // Don't mark as connected until WebSocket is actually connected
+      // For now, simulate connection for testing
       isConnected = true;
+      startHeartbeat();
       
       return { success: true };
     } else {
@@ -116,6 +118,30 @@ function disconnect() {
   isConnected = false;
   wsEndpoint = null;
   wsToken = null;
+  stopHeartbeat();
+  chrome.runtime.sendMessage({ type: 'disconnected' }).catch(() => {});
+}
+
+// Heartbeat functionality
+function startHeartbeat() {
+  stopHeartbeat(); // Clear any existing interval
+  
+  // Send status update every 15 seconds
+  heartbeatInterval = setInterval(() => {
+    chrome.runtime.sendMessage({ 
+      type: 'networkHeartbeat', 
+      ok: isConnected 
+    }).catch(() => {
+      // Popup might not be open, ignore error
+    });
+  }, 15000);
+}
+
+function stopHeartbeat() {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
 }
 
 async function handlePlaceOrder(order) {
@@ -146,3 +172,15 @@ async function handlePlaceOrder(order) {
 }
 
 console.log('Background service worker ready');
+
+// Make the side panel open automatically when the user clicks the
+// extension icon (works even without our explicit open() call)
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+});
+
+// Fallback/manual open – useful if you ever disable the behaviour above
+chrome.action.onClicked.addListener(async (tab) => {
+  // tab.id is required; using windowId silently fails
+  await chrome.sidePanel.open({ tabId: tab.id });
+});

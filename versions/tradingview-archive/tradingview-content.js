@@ -1,19 +1,85 @@
 // Content script for TradingView integration
 console.log('Volumetrica TradingView content script loaded');
 
-// Wait for page to load, then initialize
-setTimeout(() => {
-  console.log('Initializing Volumetrica extension...');
-  createTradingWidget();
-  createFloatingButton();
-}, 2000);
+// Listen for messages from extension at top level
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'show-widget') {
+    showWidget();
+    sendResponse({ success: true });
+  } else if (request.type === 'toggle-widget') {
+    toggleWidget();
+    sendResponse({ success: true });
+  }
+  return true;
+});
+
 
 let widgetFrame = null;
 let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
 
-// Declare functions before they're used
-let showWidget, hideWidget;
+// Global functions for widget control
+let widgetContainer = null;
+
+// Function to show widget
+function showWidget() {
+  if (!widgetContainer) return;
+  widgetContainer.style.display = 'block';
+  setTimeout(() => {
+    widgetContainer.style.transform = 'translateX(0)';
+    const widgetWidth = parseInt(widgetContainer.style.width) || 320;
+    adjustPageLayout(widgetWidth);
+    updateWidgetSymbol();
+  }, 10);
+}
+
+// Function to hide widget
+function hideWidget() {
+  if (!widgetContainer) return;
+  widgetContainer.style.transform = 'translateX(100%)';
+  adjustPageLayout(0);
+  setTimeout(() => {
+    widgetContainer.style.display = 'none';
+  }, 300);
+}
+
+// Toggle widget
+function toggleWidget() {
+  if (widgetContainer && widgetContainer.style.transform === 'translateX(0)') {
+    hideWidget();
+  } else {
+    showWidget();
+  }
+}
+
+// Function to adjust page layout when widget is shown/hidden
+function adjustPageLayout(widgetWidth) {
+  const body = document.body;
+  const app = document.querySelector('#onetradingview-app') || body;
+  const floatingBtn = document.getElementById('volumetrica-floating-btn');
+  
+  if (widgetWidth > 0) {
+    // Push page content to the left
+    body.style.marginRight = `${widgetWidth}px`;
+    body.style.transition = 'margin-right 0.3s ease';
+    app.style.width = `calc(100% - ${widgetWidth}px)`;
+    app.style.transition = 'width 0.3s ease';
+    
+    // Move floating button to the left of the widget
+    if (floatingBtn) {
+      floatingBtn.style.right = `${widgetWidth + 20}px`;
+    }
+  } else {
+    // Restore full width
+    body.style.marginRight = '0';
+    app.style.width = '100%';
+    
+    // Move floating button back to original position
+    if (floatingBtn) {
+      floatingBtn.style.right = '20px';
+    }
+  }
+}
 
 // Function to create floating button
 function createFloatingButton() {
@@ -52,9 +118,14 @@ function createFloatingButton() {
   });
   
   floatingBtn.addEventListener('click', () => {
-    const widget = document.getElementById('volumetrica-widget');
-    if (widget) {
+    if (typeof toggleWidget === 'function') {
       toggleWidget();
+    } else {
+      // If toggleWidget isn't defined yet, try to show the widget directly
+      const widget = document.getElementById('volumetrica-widget');
+      if (widget && typeof showWidget === 'function') {
+        showWidget();
+      }
     }
   });
   
@@ -65,11 +136,14 @@ function createFloatingButton() {
 function createTradingWidget() {
   // Check if widget already exists
   if (document.getElementById('volumetrica-widget')) {
+    console.log('Widget already exists');
+    // Make sure global functions are still accessible
+    widgetContainer = document.getElementById('volumetrica-widget');
     return;
   }
   
   // Create widget container
-  const widgetContainer = document.createElement('div');
+  widgetContainer = document.createElement('div');
   widgetContainer.id = 'volumetrica-widget';
   widgetContainer.style.cssText = `
     position: fixed;
@@ -129,6 +203,10 @@ function createTradingWidget() {
       const newWidth = window.innerWidth - e.clientX;
       if (newWidth >= 240 && newWidth <= 600) {
         widgetContainer.style.width = newWidth + 'px';
+        // Adjust page layout while resizing
+        if (widgetContainer.style.transform === 'translateX(0)') {
+          adjustPageLayout(newWidth);
+        }
       }
     }
   });
@@ -146,47 +224,17 @@ function createTradingWidget() {
     if (event.source !== widgetFrame.contentWindow) return;
     
     if (event.data.type === 'close-widget') {
-      widgetContainer.style.display = 'none';
-    }
-  });
-  
-  // Function to show widget
-  showWidget = function() {
-    widgetContainer.style.display = 'block';
-    setTimeout(() => {
-      widgetContainer.style.transform = 'translateX(0)';
-      updateWidgetSymbol();
-    }, 10);
-  }
-  
-  // Function to hide widget
-  hideWidget = function() {
-    widgetContainer.style.transform = 'translateX(100%)';
-    setTimeout(() => {
-      widgetContainer.style.display = 'none';
-    }, 300);
-  }
-  
-  // Toggle widget
-  function toggleWidget() {
-    if (widgetContainer.style.transform === 'translateX(0)') {
       hideWidget();
-    } else {
-      showWidget();
-    }
-  }
-  
-  
-  // Listen for messages from extension
-  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.type === 'show-widget') {
-      showWidget();
-      sendResponse({ success: true });
-    } else if (request.type === 'toggle-widget') {
-      toggleWidget();
-      sendResponse({ success: true });
+    } else if (event.data.type === 'request-symbol') {
+      // Widget is requesting initial symbol/price
+      updateWidgetSymbol();
     }
   });
+  
+  // Make functions globally accessible
+  window.showWidget = showWidget;
+  window.hideWidget = hideWidget;
+  window.toggleWidget = toggleWidget;
 }
 
 // Function to get current symbol from TradingView
@@ -228,14 +276,27 @@ function updateWidgetSymbol() {
 
 // Function to monitor for price updates
 function monitorPriceUpdates() {
+  let lastPrice = null;
+  let lastUpdateTime = 0;
+  const UPDATE_THROTTLE = 200; // Throttle updates to every 200ms
+  
   // Create a mutation observer to watch for price changes
   const observer = new MutationObserver(() => {
+    const now = Date.now();
+    if (now - lastUpdateTime < UPDATE_THROTTLE) return;
+    
     if (widgetFrame && document.getElementById('volumetrica-widget').style.display !== 'none') {
-      const priceElement = document.querySelector('[class*="lastPrice"]') || 
-                          document.querySelector('[class*="price-last"]');
+      // More robust price selectors
+      const priceElement = document.querySelector('[data-last-price]') ||
+                          document.querySelector('[class*="lastPrice"]') || 
+                          document.querySelector('[class*="price-last"]') ||
+                          document.querySelector('[data-qa-name="last-price"]');
+      
       if (priceElement) {
         const price = parseFloat(priceElement.textContent.replace(/[^0-9.-]/g, ''));
-        if (!isNaN(price)) {
+        if (!isNaN(price) && price !== lastPrice) {
+          lastPrice = price;
+          lastUpdateTime = now;
           widgetFrame.contentWindow.postMessage({
             type: 'price-update',
             price: price,
@@ -246,11 +307,13 @@ function monitorPriceUpdates() {
     }
   });
   
-  // Start observing
+  // Start observing with more targeted approach
   observer.observe(document.body, {
     childList: true,
     subtree: true,
-    characterData: true
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['data-last-price']
   });
 }
 
@@ -258,19 +321,20 @@ function monitorPriceUpdates() {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     createTradingWidget();
+    createFloatingButton();
     monitorPriceUpdates();
   });
 } else {
   createTradingWidget();
+  createFloatingButton();
   monitorPriceUpdates();
 }
 
 // Add keyboard shortcut to toggle widget (Ctrl/Cmd + B)
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') {
     e.preventDefault();
-    const widget = document.getElementById('volumetrica-widget');
-    if (widget) {
+    if (toggleWidget) {
       toggleWidget();
     }
   }

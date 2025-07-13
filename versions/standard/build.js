@@ -28,12 +28,12 @@ await build({
   }
 });
 
-// Build sidepanel script
+// Build popup script
 await build({
-  entryPoints: ['sidepanel.js'],
+  entryPoints: ['popup.js'],
   bundle: true,
   format: 'iife',
-  outfile: 'dist/sidepanel.js',
+  outfile: 'dist/popup.js',
   platform: 'browser',
   target: 'chrome90'
 });
@@ -41,7 +41,7 @@ await build({
 // Copy static files
 const staticFiles = [
   'manifest.json',
-  'sidepanel.html',
+  'popup.html',
   'icon-16.png',
   'icon-48.png',
   'icon-128.png'
@@ -55,4 +55,4 @@ for (const file of staticFiles) {
   }
 }
 
-console.log('Build complete! Load the dist/ folder as an unpacked extension.');
+console.log('Standard version build complete! Load the dist/ folder as an unpacked extension.');

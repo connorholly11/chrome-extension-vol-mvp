@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Volumetrica Trading Portal</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      width: 100%;
+      height: 100vh;
+      overflow: hidden;
+      background: white;
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+    
+    /* Login View */
+    #loginView {
+      padding: 40px 20px;
+      text-align: center;
+    }
+    
+    #loginView h1 {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #111;
+    }
+    
+    #loginView p {
+      color: #666;
+      margin-bottom: 30px;
+      font-size: 14px;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+      text-align: left;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 6px;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-primary:hover {
+      background: #2563eb;
+    }
+    
+    .btn-primary:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    .error-message {
+      background: #fee;
+      border: 1px solid #fcc;
+      color: #c00;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
+    
+    /* Trading View */
+    #tradingView {
+      display: none;
+      height: 100%;
+      flex-direction: column;
+    }
+    
+    /* Make the container flexible for drag resize */
+    .content-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      position: relative;
+    }
+    
+    /* Drag handle */
+    .drag-handle {
+      height: 8px;
+      background: #f3f4f6;
+      cursor: ns-resize;
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+    
+    .drag-handle:hover {
+      background: #e5e7eb;
+    }
+    
+    .drag-handle::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 4px;
+      background: #d1d5db;
+      border-radius: 2px;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+    
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      color: #111;
+      margin: 0;
+    }
+    
+    .btn-disconnect {
+      padding: 6px 12px;
+      background: white;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #374151;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-disconnect:hover {
+      background: #f3f4f6;
+    }
+    
+    /* Account Selector */
+    .account-selector {
+      padding: 12px 16px;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    
+    .account-button {
+      width: 100%;
+      padding: 12px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .account-button:hover {
+      background: #f3f4f6;
+    }
+    
+    .account-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      position: relative;
+    }
+    
+    .status-indicator.live::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: 50%;
+      border: 2px solid #10b98133;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.2); opacity: 0.7; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    
+    .account-details {
+      text-align: left;
+    }
+    
+    .account-name {
+      font-weight: 500;
+      color: #111;
+      font-size: 14px;
+    }
+    
+    .account-balance {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    
+    .chevron {
+      color: #9ca3af;
+      transition: transform 0.2s;
+    }
+    
+    /* Order Ticket Section */
+    .order-section {
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      z-index: 10;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    
+    .order-ticket {
+      padding: 16px;
+    }
+    
+    .order-ticket .form-group {
+      margin-bottom: 12px;
+    }
+    
+    .quantity-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .qty-btn {
+      padding: 8px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    
+    .qty-btn:hover {
+      background: #f3f4f6;
+    }
+    
+    .qty-input {
+      flex: 1;
+      text-align: center;
+      font-family: monospace;
+    }
+    
+    .order-type-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    
+    select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+      background: white;
+      cursor: pointer;
+    }
+    
+    .action-buttons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    
+    .btn-buy, .btn-sell {
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-buy {
+      background: #14b8a6;
+      color: white;
+    }
+    
+    .btn-buy:hover {
+      background: #0d9488;
+    }
+    
+    .btn-sell {
+      background: #f87171;
+      color: white;
+    }
+    
+    .btn-sell:hover {
+      background: #ef4444;
+    }
+    
+    .btn-buy:disabled, .btn-sell:disabled {
+      background: #e5e7eb;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    /* Risk Banner */
+    .risk-banner {
+      padding: 12px 16px;
+      border-top: 1px solid #e5e7eb;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f0fdf4;
+    }
+    
+    .risk-banner.warning {
+      background: #fef3c7;
+    }
+    
+    .risk-banner.danger {
+      background: #fee;
+    }
+    
+    .risk-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    
+    .risk-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #065f46;
+    }
+    
+    .risk-banner.warning .risk-title {
+      color: #92400e;
+    }
+    
+    .risk-banner.danger .risk-title {
+      color: #991b1b;
+    }
+    
+    .risk-values {
+      text-align: right;
+    }
+    
+    .risk-remaining {
+      font-size: 14px;
+      font-weight: 600;
+      color: #065f46;
+    }
+    
+    .risk-banner.warning .risk-remaining {
+      color: #92400e;
+    }
+    
+    .risk-banner.danger .risk-remaining {
+      color: #991b1b;
+    }
+    
+    .risk-details {
+      font-size: 12px;
+      color: #047857;
+      opacity: 0.75;
+    }
+    
+    .risk-banner.warning .risk-details {
+      color: #b45309;
+    }
+    
+    .risk-banner.danger .risk-details {
+      color: #dc2626;
+    }
+    
+    .risk-progress {
+      width: 100%;
+      height: 6px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    
+    .risk-progress-bar {
+      height: 100%;
+      background: #10b981;
+      transition: width 0.5s ease-out;
+    }
+    
+    .risk-banner.warning .risk-progress-bar {
+      background: #f59e0b;
+    }
+    
+    .risk-banner.danger .risk-progress-bar {
+      background: #ef4444;
+    }
+    
+    /* Tabs Section */
+    .tabs-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .tabs-header {
+      display: flex;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f9fafb;
+    }
+    
+    .tab-button {
+      flex: 1;
+      padding: 12px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      font-size: 14px;
+      font-weight: 500;
+      color: #6b7280;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    
+    .tab-button:hover {
+      color: #374151;
+    }
+    
+    .tab-button.active {
+      color: #3b82f6;
+      border-bottom-color: #3b82f6;
+    }
+    
+    .tab-count {
+      display: inline-block;
+      margin-left: 4px;
+      padding: 2px 6px;
+      background: #e5e7eb;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: normal;
+    }
+    
+    .tab-button.active .tab-count {
+      background: #dbeafe;
+      color: #3b82f6;
+    }
+    
+    /* Tab Content */
+    .tab-content {
+      flex: 1;
+      overflow-y: auto;
+      background: white;
+    }
+    
+    .empty-state {
+      padding: 40px 20px;
+      text-align: center;
+      color: #9ca3af;
+      font-size: 14px;
+    }
+    
+    /* Positions Table */
+    .positions-list {
+      padding: 8px 0;
+    }
+    
+    .position-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: background 0.2s;
+    }
+    
+    .position-item:hover {
+      background: #f9fafb;
+    }
+    
+    .position-info {
+      flex: 1;
+    }
+    
+    .position-symbol {
+      font-weight: 600;
+      color: #111;
+      font-size: 14px;
+    }
+    
+    .position-details {
+      font-size: 12px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    
+    .position-pnl {
+      text-align: right;
+    }
+    
+    .pnl-value {
+      font-weight: 600;
+      font-size: 14px;
+    }
+    
+    .pnl-value.positive {
+      color: #10b981;
+    }
+    
+    .pnl-value.negative {
+      color: #ef4444;
+    }
+    
+    .pnl-percent {
+      font-size: 12px;
+      margin-top: 2px;
+    }
+    
+    /* Orders List */
+    .orders-list {
+      padding: 8px 0;
+    }
+    
+    .order-item {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f3f4f6;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .order-info {
+      flex: 1;
+    }
+    
+    .order-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    
+    .order-side {
+      font-weight: 600;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    
+    .order-side.buy {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    .order-side.sell {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    
+    .order-symbol {
+      font-weight: 600;
+      font-size: 14px;
+      color: #111;
+    }
+    
+    .order-details {
+      font-size: 12px;
+      color: #6b7280;
+    }
+    
+    .order-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn-icon {
+      padding: 6px;
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-icon:hover {
+      background: #f3f4f6;
+    }
+    
+    /* Utility classes */
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Login View -->
+  <div id="loginView">
+    <h1>Volumetrica Trading</h1>
+    <p>Connect to your trading account</p>
+    
+    <div id="loginError" class="error-message hidden"></div>
+    
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" required value="quickstepshoes@traders_launch.com">
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" required value="mQ1JRp8Ma1!">
+      </div>
+      
+      <button type="submit" class="btn-primary" id="connectBtn">Connect</button>
+    </form>
+  </div>
+  
+  <!-- Trading View -->
+  <div id="tradingView">
+    <!-- Header -->
+    <header class="header">
+      <h1>Trading Portal</h1>
+      <button class="btn-disconnect" id="disconnectBtn">Disconnect</button>
+    </header>
+    
+    <!-- Account Selector -->
+    <div class="account-selector">
+      <button class="account-button" id="accountButton">
+        <div class="account-info">
+          <div class="status-indicator live"></div>
+          <div class="account-details">
+            <div class="account-name">Trading Account</div>
+            <div class="account-balance" id="accountBalance">$0.00</div>
+          </div>
+        </div>
+        <span class="chevron">▼</span>
+      </button>
+    </div>
+    
+    <!-- Content Container for drag resize -->
+    <div class="content-container">
+      <!-- Order Section -->
+      <div class="order-section">
+      <div class="order-ticket">
+        <!-- Symbol Input -->
+        <div class="form-group">
+          <label>Symbol</label>
+          <input type="text" id="symbolInput" value="ES" placeholder="Enter symbol">
+        </div>
+        
+        <!-- Quantity -->
+        <div class="form-group">
+          <label>Contracts</label>
+          <div class="quantity-controls">
+            <button class="qty-btn" id="qtyMinus">−</button>
+            <input type="number" id="quantityInput" class="form-group input qty-input" value="1" min="1">
+            <button class="qty-btn" id="qtyPlus">+</button>
+          </div>
+        </div>
+        
+        <!-- Order Type & Price -->
+        <div class="order-type-row">
+          <div class="form-group">
+            <label>Order Type</label>
+            <select id="orderTypeSelect">
+              <option value="MKT">Market</option>
+              <option value="LMT">Limit</option>
+            </select>
+          </div>
+          
+          <div class="form-group hidden" id="priceGroup">
+            <label>Price</label>
+            <input type="number" id="priceInput" placeholder="0.00" step="0.25">
+          </div>
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+          <button class="btn-buy" id="buyBtn">BUY</button>
+          <button class="btn-sell" id="sellBtn">SELL</button>
+        </div>
+      </div>
+      
+      <!-- Risk Banner -->
+      <div class="risk-banner" id="riskBanner">
+        <div class="risk-header">
+          <div class="risk-title">
+            <span>🛡️</span>
+            <span>Daily Risk Monitor</span>
+          </div>
+          <div class="risk-values">
+            <div class="risk-remaining" id="riskRemaining">$5,000.00 remaining</div>
+            <div class="risk-details" id="riskDetails">Loss: $0.00 / $5,000</div>
+          </div>
+        </div>
+        <div class="risk-progress">
+          <div class="risk-progress-bar" id="riskProgressBar" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Drag Handle -->
+    <div class="drag-handle" id="dragHandle"></div>
+    
+    <!-- Tabs Container -->
+    <div class="tabs-container">
+      <!-- Tabs Header -->
+      <div class="tabs-header">
+        <button class="tab-button active" data-tab="positions">
+          Positions<span class="tab-count" id="positionsCount">0</span>
+        </button>
+        <button class="tab-button" data-tab="orders">
+          Orders<span class="tab-count" id="ordersCount">0</span>
+        </button>
+        <button class="tab-button" data-tab="fills">
+          Fills<span class="tab-count" id="fillsCount">0</span>
+        </button>
+      </div>
+      
+      <!-- Tab Content -->
+      <div class="tab-content">
+        <!-- Positions Tab -->
+        <div id="positionsTab" class="tab-pane">
+          <div class="empty-state">No open positions</div>
+          <div class="positions-list hidden" id="positionsList"></div>
+        </div>
+        
+        <!-- Orders Tab -->
+        <div id="ordersTab" class="tab-pane hidden">
+          <div class="empty-state">No active orders</div>
+          <div class="orders-list hidden" id="ordersList"></div>
+        </div>
+        
+        <!-- Fills Tab -->
+        <div id="fillsTab" class="tab-pane hidden">
+          <div class="empty-state">No fills today</div>
+          <div class="orders-list hidden" id="fillsList"></div>
+        </div>
+      </div>
+    </div>
+    </div> <!-- End content-container -->
+  </div>
+  
+  <script src="sidepanel.js"></script>
+</body>
+</html>

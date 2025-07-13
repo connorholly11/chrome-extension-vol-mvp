@@ -1,7 +1,7 @@
 {
-  "name": "volumetrica-trading-extension",
+  "name": "traders-launch-trading-extension",
   "version": "1.0.0",
-  "description": "Ultra-lean trading extension for Volumetrica",
+  "description": "Professional trading extension for Traders Launch",
   "type": "module",
   "scripts": {
     "build": "node build.js",

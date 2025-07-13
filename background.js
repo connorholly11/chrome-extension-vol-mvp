@@ -1,4 +1,4 @@
-// Clean background service worker for Volumetrica Trading Extension
+// Clean background service worker for Traders Launch Trading Extension
 console.log('=== BACKGROUND SERVICE WORKER STARTING ===');
 
 // Configuration
@@ -173,14 +173,21 @@ async function handlePlaceOrder(order) {
 
 console.log('Background service worker ready');
 
-// Make the side panel open automatically when the user clicks the
-// extension icon (works even without our explicit open() call)
+// Set up side panel behavior on install AND on startup
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error('Failed to set panel behavior:', error));
 });
 
-// Fallback/manual open – useful if you ever disable the behaviour above
-chrome.action.onClicked.addListener(async (tab) => {
-  // tab.id is required; using windowId silently fails
-  await chrome.sidePanel.open({ tabId: tab.id });
+// Also set it on startup in case it was cleared
+chrome.runtime.onStartup.addListener(() => {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error('Failed to set panel behavior:', error));
+});
+
+// Handle extension icon click
+chrome.action.onClicked.addListener((tab) => {
+  console.log('Extension icon clicked, opening side panel...');
+  chrome.sidePanel.open({ tabId: tab.id })
+    .catch((error) => console.error('Failed to open side panel:', error));
 });

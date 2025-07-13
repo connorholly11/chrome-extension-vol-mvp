@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Volumetrica Trading Extension",
+  "name": "Traders Launch Trading Extension",
   "version": "1.0.0",
-  "description": "Ultra-lean trading extension for Volumetrica",
+  "description": "Professional trading extension for Traders Launch",
   "minimum_chrome_version": "114",
   "permissions": [
     "storage",
@@ -15,6 +15,19 @@
     "https://*.volumetricafx.com/*",
     "https://*.volumetricatrading.com/*",
     "http://localhost:3001/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://*.tradingview.com/*"],
+      "js": ["tradingview-content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["tradingview-content.js"],
+      "matches": ["https://*.tradingview.com/*"]
+    }
   ],
   "background": {
     "service_worker": "background.js",

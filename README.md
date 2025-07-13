@@ -1,6 +1,6 @@
-# Volumetrica Trading Chrome Extension MVP
+# Traders Launch Trading Extension
 
-Ultra-lean Chrome extension for trading via Volumetrica API.
+Professional Chrome extension for trading via Traders Launch platform.
 
 ## Features
 - Chrome Manifest V3 extension

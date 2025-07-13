@@ -1,167 +1,717 @@
 // State management
 let state = {
   connected: false,
-  accountInfo: {
-    accountNo: null,
-    balance: 0,
-    position: 0,
-    pnl: 0
+  theme: 'dark', // Default to dark theme
+  headerCollapsed: false,
+  accountDropdownOpen: false,
+  syncEnabled: true, // NEW - panel dictates TradingView symbol
+  copyTradingEnabled: false, // Copy trading across all live accounts
+  selectedAccount: {
+    id: 'acc-001',
+    name: 'Trading Account',
+    balance: 125430.50,
+    isLive: true
+  },
+  accounts: [
+    {
+      id: 'acc-001',
+      name: 'Trading Account',
+      balance: 125430.50,
+      isLive: true,
+      platform: 'Traders Launch'
+    },
+    {
+      id: 'acc-002',
+      name: 'Paper Trading',
+      balance: 100000.00,
+      isLive: false,
+      platform: 'Traders Launch'
+    },
+    {
+      id: 'acc-003',
+      name: 'Live Account 2',
+      balance: 75250.00,
+      isLive: true,
+      platform: 'Traders Launch'
+    },
+    {
+      id: 'acc-004',
+      name: 'Live Account 3',
+      balance: 200000.00,
+      isLive: true,
+      platform: 'Traders Launch'
+    }
+  ],
+  orderForm: {
+    symbol: 'ES',
+    quantity: 1,
+    orderType: 'MKT',
+    price: '',
+    timeInForce: 'DAY',
+    isPriceLocked: false
   },
   activeTab: 'positions',
   positions: [],
   orders: [],
-  fills: [],
-  dailyLoss: 0,
-  dailyLimit: 5000
+  fills: []
 };
 
-// Mock data for demo
+// Mock data
 const mockPositions = [
   { symbol: 'ES', quantity: 5, avgPrice: 5294.75, currentPrice: 5298.25, pnl: 875.00, pnlPercent: 0.66 },
-  { symbol: 'NQ', quantity: -2, avgPrice: 18245.50, currentPrice: 18198.75, pnl: 935.00, pnlPercent: 1.28 }
+  { symbol: 'NQ', quantity: -2, avgPrice: 18245.50, currentPrice: 18198.75, pnl: 935.00, pnlPercent: 1.28 },
+  { symbol: 'YM', quantity: 3, avgPrice: 42850.00, currentPrice: 42798.00, pnl: -156.00, pnlPercent: -0.12 },
+  { symbol: 'RTY', quantity: 1, avgPrice: 2245.80, currentPrice: 2251.40, pnl: 280.00, pnlPercent: 0.25 }
 ];
 
 const mockOrders = [
-  { id: '1', symbol: 'ES', side: 'BUY', quantity: 2, orderType: 'LMT', price: 5290.00, status: 'PENDING' }
+  { id: '1', symbol: 'ES', side: 'BUY', quantity: 2, orderType: 'LMT', price: 5290.00, status: 'PENDING', timestamp: new Date() },
+  { id: '2', symbol: 'NQ', side: 'SELL', quantity: 1, orderType: 'LMT', price: 18250.00, status: 'PARTIAL', timestamp: new Date() }
 ];
 
 const mockFills = [
-  { id: '1', symbol: 'ES', side: 'BUY', quantity: 5, price: 5294.75, timestamp: new Date(Date.now() - 3600000) }
+  { id: '1', symbol: 'ES', side: 'BUY', quantity: 5, price: 5294.75, timestamp: new Date(Date.now() - 3600000) },
+  { id: '2', symbol: 'NQ', side: 'SELL', quantity: 2, price: 18245.50, timestamp: new Date(Date.now() - 7200000) }
 ];
 
 // DOM Elements
-const loginView = document.getElementById('loginView');
-const tradingView = document.getElementById('tradingView');
-const loginForm = document.getElementById('loginForm');
-const loginError = document.getElementById('loginError');
-const usernameInput = document.getElementById('username');
-const passwordInput = document.getElementById('password');
-const connectBtn = document.getElementById('connectBtn');
-const disconnectBtn = document.getElementById('disconnectBtn');
+const elements = {};
 
-// Trading elements
-const symbolInput = document.getElementById('symbolInput');
-const quantityInput = document.getElementById('quantityInput');
-const orderTypeSelect = document.getElementById('orderTypeSelect');
-const priceGroup = document.getElementById('priceGroup');
-const priceInput = document.getElementById('priceInput');
-const buyBtn = document.getElementById('buyBtn');
-const sellBtn = document.getElementById('sellBtn');
-const qtyMinus = document.getElementById('qtyMinus');
-const qtyPlus = document.getElementById('qtyPlus');
-
-// Account elements
-const accountBalance = document.getElementById('accountBalance');
-const accountButton = document.getElementById('accountButton');
-
-// Risk banner elements
-const riskBanner = document.getElementById('riskBanner');
-const riskRemaining = document.getElementById('riskRemaining');
-const riskDetails = document.getElementById('riskDetails');
-const riskProgressBar = document.getElementById('riskProgressBar');
-
-// Tab elements
-const tabButtons = document.querySelectorAll('.tab-button');
-const positionsCount = document.getElementById('positionsCount');
-const ordersCount = document.getElementById('ordersCount');
-const fillsCount = document.getElementById('fillsCount');
-const positionsTab = document.getElementById('positionsTab');
-const ordersTab = document.getElementById('ordersTab');
-const fillsTab = document.getElementById('fillsTab');
-
-// Initialize
-document.addEventListener('DOMContentLoaded', async () => {
-  // Check connection status on load
-  const response = await chrome.runtime.sendMessage({ type: 'getStatus' });
-  if (response && response.connected) {
-    state.connected = true;
-    state.accountInfo = response.accountInfo || state.accountInfo;
-    showTradingView();
-  }
-  
+// Initialize on DOM load
+document.addEventListener('DOMContentLoaded', () => {
+  initializeElements();
   setupEventListeners();
-  setupDragHandle();
-  updateUI();
+  setupKeyboardShortcuts();
+  loadTheme();
+  checkConnectionStatus();
 });
 
-// Setup event listeners
+function initializeElements() {
+  // View elements
+  elements.loginView = document.getElementById('loginView');
+  elements.tradingView = document.getElementById('tradingView');
+  
+  // Login elements
+  elements.loginForm = document.getElementById('loginForm');
+  elements.loginError = document.getElementById('loginError');
+  elements.platformSelect = document.getElementById('platform');
+  elements.usernameInput = document.getElementById('username');
+  elements.passwordInput = document.getElementById('password');
+  elements.connectBtn = document.getElementById('connectBtn');
+  
+  // Header elements
+  elements.themeToggle = document.getElementById('themeToggle');
+  elements.popoutBtn = document.getElementById('popoutBtn');
+  elements.collapseBtn = document.getElementById('collapseBtn');
+  elements.syncToggle = document.getElementById('syncToggle');
+  elements.disconnectBtn = document.getElementById('disconnectBtn');
+  elements.accountSection = document.getElementById('accountSection');
+  
+  // Account elements
+  elements.accountButton = document.getElementById('accountButton');
+  elements.accountName = document.getElementById('accountName');
+  elements.accountBalance = document.getElementById('accountBalance');
+  elements.accountChevron = document.getElementById('accountChevron');
+  elements.accountDropdown = document.getElementById('accountDropdown');
+  elements.dropdownBackdrop = document.getElementById('dropdownBackdrop');
+  elements.addAccountOption = document.getElementById('addAccountOption');
+  
+  // Copy trading elements
+  elements.copyTradingSection = document.getElementById('copyTradingSection');
+  elements.copyTradingInfo = document.getElementById('copyTradingInfo');
+  elements.copyToggle = document.getElementById('copyToggle');
+  
+  // Order form elements
+  elements.symbolInput = document.getElementById('symbolInput');
+  elements.quantityInput = document.getElementById('quantityInput');
+  elements.qtyMinus = document.getElementById('qtyMinus');
+  elements.qtyPlus = document.getElementById('qtyPlus');
+  elements.orderTypeSelect = document.getElementById('orderTypeSelect');
+  elements.priceGroup = document.getElementById('priceGroup');
+  elements.priceInput = document.getElementById('priceInput');
+  elements.priceLock = document.getElementById('priceLock');
+  elements.buyBtn = document.getElementById('buyBtn');
+  elements.sellBtn = document.getElementById('sellBtn');
+  elements.closeBtn = document.getElementById('closeBtn');
+  
+  // Tab elements
+  elements.tabButtons = document.querySelectorAll('.tab-button');
+  elements.positionsTab = document.getElementById('positionsTab');
+  elements.ordersTab = document.getElementById('ordersTab');
+  elements.fillsTab = document.getElementById('fillsTab');
+  elements.positionsCount = document.getElementById('positionsCount');
+  elements.ordersCount = document.getElementById('ordersCount');
+  elements.fillsCount = document.getElementById('fillsCount');
+  elements.positionsList = document.getElementById('positionsList');
+  elements.ordersList = document.getElementById('ordersList');
+  elements.fillsList = document.getElementById('fillsList');
+  elements.positionsEmpty = document.getElementById('positionsEmpty');
+  elements.ordersEmpty = document.getElementById('ordersEmpty');
+  elements.fillsEmpty = document.getElementById('fillsEmpty');
+}
+
 function setupEventListeners() {
   // Login form
-  loginForm.addEventListener('submit', handleConnect);
+  elements.loginForm.addEventListener('submit', handleLogin);
   
-  // Disconnect button
-  disconnectBtn.addEventListener('click', handleDisconnect);
+  // Theme toggle
+  elements.themeToggle?.addEventListener('click', toggleTheme);
   
-  // Quantity controls
-  qtyMinus.addEventListener('click', () => {
-    const current = parseInt(quantityInput.value) || 1;
-    quantityInput.value = Math.max(1, current - 1);
+  // Header actions
+  elements.popoutBtn?.addEventListener('click', handlePopout);
+  elements.collapseBtn?.addEventListener('click', toggleHeaderCollapse);
+  elements.syncToggle?.addEventListener('click', () => {
+    state.syncEnabled = !state.syncEnabled;
+    updateSyncUI();
+    if (state.syncEnabled) broadcastSymbol();
+  });
+  elements.disconnectBtn?.addEventListener('click', handleDisconnect);
+  
+  // Account selector
+  elements.accountButton?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleAccountDropdown();
   });
   
-  qtyPlus.addEventListener('click', () => {
-    const current = parseInt(quantityInput.value) || 1;
-    quantityInput.value = current + 1;
-  });
-  
-  // Order type change
-  orderTypeSelect.addEventListener('change', (e) => {
-    if (e.target.value === 'LMT') {
-      priceGroup.classList.remove('hidden');
-    } else {
-      priceGroup.classList.add('hidden');
+  // Account options - use event delegation for better handling
+  elements.accountDropdown?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const option = e.target.closest('.account-option');
+    if (option) {
+      if (option.id === 'addAccountOption') {
+        alert('Account onboarding coming soon 🤝');
+        closeAccountDropdown();
+      } else {
+        selectAccount(option);
+      }
     }
   });
   
-  // Buy/Sell buttons
-  buyBtn.addEventListener('click', () => handleOrder('BUY'));
-  sellBtn.addEventListener('click', () => handleOrder('SELL'));
-  
-  // Tab switching
-  tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
-      const tab = button.getAttribute('data-tab');
-      switchTab(tab);
-    });
+  // Close dropdown when clicking outside or on backdrop
+  document.addEventListener('click', (e) => {
+    if (!elements.accountButton.contains(e.target) && !elements.accountDropdown.contains(e.target)) {
+      closeAccountDropdown();
+    }
   });
   
-  // Listen for account updates from background
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'accountUpdate') {
-      state.accountInfo = message.data;
-      updateAccountDisplay();
-      updateRiskBanner();
-    } else if (message.type === 'disconnected') {
-      state.connected = false;
-      showLoginView();
-    } else if (message.type === 'networkHeartbeat') {
-      // Update connection indicator if needed
-      const statusIndicator = document.querySelector('.status-indicator');
-      if (statusIndicator) {
-        if (message.ok) {
-          statusIndicator.classList.add('live');
-        } else {
-          statusIndicator.classList.remove('live');
-        }
-      }
+  // Close dropdown when clicking backdrop
+  elements.dropdownBackdrop?.addEventListener('click', closeAccountDropdown);
+  
+  // Copy trading toggle
+  elements.copyToggle?.addEventListener('click', () => {
+    state.copyTradingEnabled = !state.copyTradingEnabled;
+    updateCopyTradingUI();
+  });
+  
+  // Order form
+  elements.symbolInput.addEventListener('input', (e) => {
+    state.orderForm.symbol = e.target.value.toUpperCase();
+    e.target.value = state.orderForm.symbol;
+    broadcastSymbol();
+  });
+  
+  elements.quantityInput.addEventListener('input', (e) => {
+    state.orderForm.quantity = Math.max(1, parseInt(e.target.value) || 1);
+  });
+  
+  elements.qtyMinus.addEventListener('click', () => changeQuantity(-1));
+  elements.qtyPlus.addEventListener('click', () => changeQuantity(1));
+  
+  elements.orderTypeSelect.addEventListener('change', (e) => {
+    state.orderForm.orderType = e.target.value;
+    updateOrderTypeUI();
+  });
+  
+  elements.priceInput.addEventListener('input', (e) => {
+    state.orderForm.price = e.target.value;
+  });
+  
+  elements.priceLock.addEventListener('click', togglePriceLock);
+  
+  elements.buyBtn.addEventListener('click', () => handleOrder('BUY'));
+  elements.sellBtn.addEventListener('click', () => handleOrder('SELL'));
+  elements.closeBtn.addEventListener('click', handleClosePosition);
+  
+  // Tabs
+  elements.tabButtons.forEach(button => {
+    button.addEventListener('click', () => switchTab(button.getAttribute('data-tab')));
+  });
+  
+  // Listen for messages from background
+  chrome.runtime.onMessage.addListener(handleBackgroundMessage);
+}
+
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Alt+B for Buy
+    if (e.altKey && e.key === 'b') {
+      e.preventDefault();
+      handleOrder('BUY');
+    }
+    // Alt+S for Sell
+    else if (e.altKey && e.key === 's') {
+      e.preventDefault();
+      handleOrder('SELL');
+    }
+    // Cmd/Ctrl+Enter for submit
+    else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      // Submit current order based on focus or last action
     }
   });
 }
 
-// Handle connection
-async function handleConnect(e) {
-  e.preventDefault();
+// Theme management
+function loadTheme() {
+  const savedTheme = localStorage.getItem('theme') || 'dark'; // Default to dark
+  state.theme = savedTheme;
+  updateThemeUI();
+}
+
+function toggleTheme() {
+  state.theme = state.theme === 'light' ? 'dark' : 'light';
+  localStorage.setItem('theme', state.theme);
+  updateThemeUI();
+}
+
+function updateThemeUI() {
+  const themeIcon = document.getElementById('themeIcon');
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
   
-  const username = usernameInput.value.trim();
-  const password = passwordInput.value.trim();
+  if (state.theme === 'dark') {
+    document.documentElement.classList.add('dark');
+    document.documentElement.classList.remove('light');
+    elements.themeToggle?.classList.remove('light');
+    if (themeIcon) themeIcon.className = 'icon-moon';
+    if (metaThemeColor) metaThemeColor.content = '#0a0a0a';
+  } else {
+    document.documentElement.classList.remove('dark');
+    document.documentElement.classList.add('light');
+    elements.themeToggle?.classList.add('light');
+    if (themeIcon) themeIcon.className = 'icon-sun';
+    if (metaThemeColor) metaThemeColor.content = '#ffffff';
+  }
+}
+
+// Header actions
+function handlePopout() {
+  // Create a new window with the extension
+  chrome.windows.create({
+    url: chrome.runtime.getURL('sidepanel.html'),
+    type: 'popup',
+    width: 400,
+    height: 800
+  });
+}
+
+function toggleHeaderCollapse() {
+  state.headerCollapsed = !state.headerCollapsed;
   
-  if (!username || !password) {
-    showError('Please enter both username and password');
+  if (state.headerCollapsed) {
+    elements.accountSection.classList.add('collapsed');
+    elements.collapseBtn.innerHTML = '<span class="icon-chevron-down"></span>';
+  } else {
+    elements.accountSection.classList.remove('collapsed');
+    elements.collapseBtn.innerHTML = '<span class="icon-chevron-up"></span>';
+  }
+}
+
+// Account management
+function toggleAccountDropdown() {
+  state.accountDropdownOpen = !state.accountDropdownOpen;
+  
+  if (state.accountDropdownOpen) {
+    elements.accountDropdown.classList.add('open');
+    elements.accountChevron.classList.add('open');
+    elements.dropdownBackdrop.classList.add('active');
+  } else {
+    closeAccountDropdown();
+  }
+}
+
+function closeAccountDropdown() {
+  state.accountDropdownOpen = false;
+  elements.accountDropdown.classList.remove('open');
+  elements.accountChevron.classList.remove('open');
+  elements.dropdownBackdrop.classList.remove('active');
+}
+
+function selectAccount(optionElement) {
+  const accountId = optionElement.getAttribute('data-account-id');
+  const account = state.accounts.find(a => a.id === accountId);
+  
+  if (account) {
+    state.selectedAccount = account;
+    updateAccountUI();
+    closeAccountDropdown();
+  }
+}
+
+function updateAccountUI() {
+  elements.accountName.textContent = state.selectedAccount.name;
+  elements.accountBalance.textContent = `$${state.selectedAccount.balance.toLocaleString('en-US', { minimumFractionDigits: 0 })}`;
+  
+  // Update live status
+  const statusDot = elements.accountButton.querySelector('.status-dot');
+  if (state.selectedAccount.isLive) {
+    statusDot.classList.add('live');
+  } else {
+    statusDot.classList.remove('live');
+  }
+}
+
+
+// Order form
+function changeQuantity(delta) {
+  state.orderForm.quantity = Math.max(1, state.orderForm.quantity + delta);
+  elements.quantityInput.value = state.orderForm.quantity;
+}
+
+function updateOrderTypeUI() {
+  if (state.orderForm.orderType === 'LMT') {
+    elements.priceGroup.classList.remove('hidden');
+  } else {
+    elements.priceGroup.classList.add('hidden');
+  }
+}
+
+function togglePriceLock() {
+  state.orderForm.isPriceLocked = !state.orderForm.isPriceLocked;
+  
+  if (state.orderForm.isPriceLocked) {
+    elements.priceInput.disabled = true;
+    elements.priceLock.innerHTML = '<span class="icon-lock"></span>';
+  } else {
+    elements.priceInput.disabled = false;
+    elements.priceLock.innerHTML = '<span class="icon-unlock"></span>';
+  }
+}
+
+async function handleOrder(side) {
+  if (!state.orderForm.symbol) {
+    alert('Please enter a symbol');
     return;
   }
   
-  connectBtn.disabled = true;
-  connectBtn.textContent = 'Connecting...';
-  loginError.classList.add('hidden');
+  if (state.orderForm.orderType === 'LMT' && !state.orderForm.price) {
+    alert('Please enter a limit price');
+    return;
+  }
+  
+  const button = side === 'BUY' ? elements.buyBtn : elements.sellBtn;
+  button.disabled = true;
+  button.textContent = 'Placing...';
+  
+  try {
+    // Determine which accounts to trade on
+    let accountsToTrade = [state.selectedAccount];
+    
+    if (state.copyTradingEnabled) {
+      // Get all live accounts for copy trading
+      accountsToTrade = state.accounts.filter(acc => acc.isLive);
+      button.textContent = `Placing ${accountsToTrade.length}...`;
+    }
+    
+    // Place orders on all selected accounts
+    const orderPromises = accountsToTrade.map(account => {
+      return chrome.runtime.sendMessage({
+        type: 'placeOrder',
+        accountId: account.id,
+        accountName: account.name,
+        order: {
+          symbol: state.orderForm.symbol,
+          side: side.toLowerCase(),
+          quantity: state.orderForm.quantity,
+          orderType: state.orderForm.orderType.toLowerCase(),
+          price: state.orderForm.orderType === 'LMT' ? parseFloat(state.orderForm.price) : null
+        }
+      });
+    });
+    
+    const responses = await Promise.allSettled(orderPromises);
+    
+    // Count successful orders
+    let successCount = 0;
+    let failedAccounts = [];
+    
+    responses.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value.success) {
+        successCount++;
+        
+        // Add to orders list
+        const newOrder = {
+          id: result.value.orderId,
+          accountId: accountsToTrade[index].id,
+          accountName: accountsToTrade[index].name,
+          symbol: state.orderForm.symbol,
+          side: side,
+          quantity: state.orderForm.quantity,
+          orderType: state.orderForm.orderType,
+          price: state.orderForm.orderType === 'LMT' ? parseFloat(state.orderForm.price) : null,
+          status: 'PENDING',
+          timestamp: new Date()
+        };
+        state.orders.push(newOrder);
+      } else {
+        failedAccounts.push(accountsToTrade[index].name);
+      }
+    });
+    
+    updateOrdersDisplay();
+    
+    // Show result
+    if (successCount === accountsToTrade.length) {
+      button.textContent = state.copyTradingEnabled ? `${successCount} Sent!` : 'Sent!';
+    } else if (successCount > 0) {
+      button.textContent = `${successCount}/${accountsToTrade.length} Sent`;
+      if (failedAccounts.length > 0) {
+        console.warn('Failed accounts:', failedAccounts.join(', '));
+      }
+    } else {
+      alert('All orders failed');
+    }
+    
+    // Draw limit order line on TradingView chart
+    if (state.orderForm.orderType === 'LMT' && successCount > 0) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs.length && tabs[0].url.includes('tradingview.com')) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'drawLimitOrderLine',
+            symbol: state.orderForm.symbol,
+            price: parseFloat(state.orderForm.price),
+            side: side
+          }).catch(err => {
+            console.log('Could not send to TradingView:', err);
+          });
+        }
+      });
+    }
+    
+    setTimeout(() => {
+      button.textContent = side;
+      button.disabled = false;
+    }, 2000);
+    
+  } catch (error) {
+    alert('Order error: ' + error.message);
+    button.textContent = side;
+    button.disabled = false;
+  }
+}
+
+function handleClosePosition() {
+  console.log('Close position for:', state.orderForm.symbol);
+  // TODO: Implement close position logic
+}
+
+// Tab management
+function switchTab(tabName) {
+  state.activeTab = tabName;
+  
+  // Update tab buttons
+  elements.tabButtons.forEach(button => {
+    if (button.getAttribute('data-tab') === tabName) {
+      button.classList.add('active');
+    } else {
+      button.classList.remove('active');
+    }
+  });
+  
+  // Update tab content
+  const tabs = {
+    positions: elements.positionsTab,
+    orders: elements.ordersTab,
+    fills: elements.fillsTab
+  };
+  
+  Object.entries(tabs).forEach(([key, element]) => {
+    if (key === tabName) {
+      element.classList.add('active');
+    } else {
+      element.classList.remove('active');
+    }
+  });
+}
+
+// Display updates
+function updatePositionsDisplay() {
+  // Use mock data when connected
+  state.positions = state.connected ? mockPositions : [];
+  elements.positionsCount.textContent = state.positions.length;
+  
+  if (state.positions.length === 0) {
+    elements.positionsEmpty.style.display = 'block';
+    elements.positionsList.style.display = 'none';
+  } else {
+    elements.positionsEmpty.style.display = 'none';
+    elements.positionsList.style.display = 'block';
+    
+    // Send position updates to TradingView
+    state.positions.forEach(position => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs.length && tabs[0].url.includes('tradingview.com')) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            type: 'updatePosition',
+            symbol: position.symbol,
+            quantity: position.quantity,
+            avgPrice: position.avgPrice
+          }).catch(err => {
+            console.log('Could not update position on TradingView:', err);
+          });
+        }
+      });
+    });
+    
+    elements.positionsList.innerHTML = state.positions.map(position => `
+      <div class="position-item">
+        <div class="position-header">
+          <div>
+            <span class="position-symbol">${position.symbol}</span>
+            <span class="position-quantity">${position.quantity > 0 ? '+' : ''}${position.quantity}</span>
+          </div>
+          <div class="position-pnl">
+            <div class="pnl-value ${position.pnl >= 0 ? 'positive' : 'negative'}">
+              ${position.pnl >= 0 ? '+' : ''}$${Math.abs(position.pnl).toFixed(0)}
+            </div>
+            <div class="pnl-percent ${position.pnlPercent >= 0 ? 'positive' : 'negative'}">
+              ${position.pnlPercent >= 0 ? '+' : ''}${position.pnlPercent.toFixed(2)}%
+            </div>
+          </div>
+        </div>
+        <div class="position-details">
+          <span>Avg: $${position.avgPrice.toFixed(2)}</span>
+          <span>Now: $${position.currentPrice.toFixed(2)}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+}
+
+function updateOrdersDisplay() {
+  // Use mock data when connected
+  if (state.connected && state.orders.length === 0) {
+    state.orders = mockOrders;
+  }
+  
+  elements.ordersCount.textContent = state.orders.length;
+  
+  if (state.orders.length === 0) {
+    elements.ordersEmpty.style.display = 'block';
+    elements.ordersList.style.display = 'none';
+  } else {
+    elements.ordersEmpty.style.display = 'none';
+    elements.ordersList.style.display = 'block';
+    
+    elements.ordersList.innerHTML = state.orders.map(order => {
+      const statusIcon = getStatusIcon(order.status);
+      
+      return `
+        <div class="order-item">
+          <div class="order-header">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${statusIcon}
+              <span class="order-symbol">${order.symbol}</span>
+              <span class="order-side ${order.side.toLowerCase()}">${order.side}</span>
+            </div>
+            <div class="order-actions">
+              <button class="btn-mini" onclick="editOrder('${order.id}')">
+                <span class="icon-edit"></span>
+              </button>
+              <button class="btn-mini" onclick="cancelOrder('${order.id}')">
+                <span class="icon-x"></span>
+              </button>
+            </div>
+          </div>
+          <div class="order-details">
+            <span>${order.quantity} @ ${order.orderType}</span>
+            ${order.price ? `<span>$${order.price.toFixed(2)}</span>` : ''}
+          </div>
+          <div class="order-details" style="margin-top: 2px;">
+            <span>${order.timestamp.toLocaleTimeString()}</span>
+            ${order.accountName ? `<span style="color: var(--muted-foreground);"> • ${order.accountName}</span>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function updateFillsDisplay() {
+  // Use mock data when connected
+  state.fills = state.connected ? mockFills : [];
+  elements.fillsCount.textContent = state.fills.length;
+  
+  if (state.fills.length === 0) {
+    elements.fillsEmpty.style.display = 'block';
+    elements.fillsList.style.display = 'none';
+  } else {
+    elements.fillsEmpty.style.display = 'none';
+    elements.fillsList.style.display = 'block';
+    
+    elements.fillsList.innerHTML = state.fills.map(fill => {
+      const icon = fill.side === 'BUY' ? 
+        '<span class="icon-trending-up" style="color: var(--teal);"></span>' : 
+        '<span class="icon-trending-down" style="color: var(--red);"></span>';
+      
+      return `
+        <div class="fill-item">
+          <div class="fill-header">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              ${icon}
+              <span class="fill-symbol">${fill.symbol}</span>
+              <span class="fill-side ${fill.side.toLowerCase()}">${fill.side}</span>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 12px; font-weight: 600;">$${fill.price.toFixed(2)}</div>
+              <div style="font-size: 12px; color: var(--muted-foreground);">${fill.quantity} contracts</div>
+            </div>
+          </div>
+          <div class="fill-details">
+            <span>${fill.timestamp.toLocaleString()}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function getStatusIcon(status) {
+  switch (status) {
+    case 'PENDING':
+      return '<span class="icon-clock" style="color: var(--yellow);"></span>';
+    case 'PARTIAL':
+      return '<span class="icon-alert" style="color: var(--orange);"></span>';
+    case 'FILLED':
+      return '<span class="icon-check" style="color: var(--green);"></span>';
+    case 'CANCELLED':
+      return '<span class="icon-x" style="color: var(--muted-foreground);"></span>';
+    default:
+      return '';
+  }
+}
+
+// Login handling
+async function handleLogin(e) {
+  e.preventDefault();
+  
+  const platform = elements.platformSelect.value;
+  const username = elements.usernameInput.value.trim();
+  const password = elements.passwordInput.value.trim();
+  
+  if (!username || !password) {
+    showLoginError('Please enter both username and password');
+    return;
+  }
+  
+  // Only Volumetrica is supported for now
+  if (platform !== 'volumetrica') {
+    showLoginError('This platform is coming soon!');
+    return;
+  }
+  
+  elements.connectBtn.disabled = true;
+  elements.connectBtn.textContent = 'Connecting...';
+  elements.loginError.classList.add('hidden');
   
   try {
     const response = await chrome.runtime.sendMessage({
@@ -170,24 +720,62 @@ async function handleConnect(e) {
       password
     });
     
-    if (response.success) {
+    if (response && response.success) {
       state.connected = true;
       showTradingView();
       
-      // Get initial status
+      // Get initial account status
       const statusResponse = await chrome.runtime.sendMessage({ type: 'getStatus' });
-      if (statusResponse) {
-        state.accountInfo = statusResponse.accountInfo || state.accountInfo;
-        updateAccountDisplay();
+      if (statusResponse && statusResponse.accountInfo) {
+        state.selectedAccount.balance = statusResponse.accountInfo.balance || state.selectedAccount.balance;
+        updateAccountUI();
       }
+      
+      updateUI();
     } else {
-      showError(response.error || 'Connection failed');
+      showLoginError(response?.error || 'Connection failed');
     }
   } catch (error) {
-    showError('Failed to connect: ' + error.message);
+    showLoginError('Failed to connect: ' + error.message);
   } finally {
-    connectBtn.disabled = false;
-    connectBtn.textContent = 'Connect';
+    elements.connectBtn.disabled = false;
+    elements.connectBtn.textContent = 'Connect';
+  }
+}
+
+function showLoginError(message) {
+  elements.loginError.textContent = message;
+  elements.loginError.classList.remove('hidden');
+}
+
+function showLoginView() {
+  elements.loginView.classList.remove('hidden');
+  elements.tradingView.classList.add('hidden');
+}
+
+function showTradingView() {
+  elements.loginView.classList.add('hidden');
+  elements.tradingView.classList.remove('hidden');
+}
+
+// Connection management
+async function checkConnectionStatus() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'getStatus' });
+    if (response && response.connected) {
+      state.connected = true;
+      if (response.accountInfo) {
+        // Update account info from real data
+        state.selectedAccount.balance = response.accountInfo.balance || state.selectedAccount.balance;
+      }
+      showTradingView();
+      updateUI();
+    } else {
+      showLoginView();
+    }
+  } catch (error) {
+    console.error('Failed to check connection status:', error);
+    showLoginView();
   }
 }
 
@@ -196,324 +784,102 @@ async function handleDisconnect() {
   try {
     await chrome.runtime.sendMessage({ type: 'disconnect' });
     state.connected = false;
-    state.accountInfo = {
-      accountNo: null,
-      balance: 0,
-      position: 0,
-      pnl: 0
-    };
     showLoginView();
   } catch (error) {
     console.error('Disconnect error:', error);
   }
 }
 
-// Handle order submission
-async function handleOrder(side) {
-  const symbol = symbolInput.value.trim();
-  const quantity = parseInt(quantityInput.value) || 1;
-  const orderType = orderTypeSelect.value;
-  const price = orderType === 'LMT' ? parseFloat(priceInput.value) : null;
-  
-  if (!symbol) {
-    alert('Please enter a symbol');
-    return;
-  }
-  
-  if (orderType === 'LMT' && !price) {
-    alert('Please enter a limit price');
-    return;
-  }
-  
-  const button = side === 'BUY' ? buyBtn : sellBtn;
-  button.disabled = true;
-  button.textContent = 'Placing...';
-  
-  try {
-    const response = await chrome.runtime.sendMessage({
-      type: 'sendOrder',
-      symbol,
-      quantity,
-      side
-    });
-    
-    if (response.success) {
-      button.textContent = 'Sent!';
-      setTimeout(() => {
-        button.textContent = side;
-        button.disabled = false;
-      }, 2000);
+function handleBackgroundMessage(message) {
+  switch (message.type) {
+    case 'accountUpdate':
+      if (message.data) {
+        state.selectedAccount.balance = message.data.balance || state.selectedAccount.balance;
+        updateAccountUI();
+      }
+      break;
       
-      // Add mock order to demonstrate
-      const newOrder = {
-        id: Date.now().toString(),
-        symbol,
-        side,
-        quantity,
-        orderType,
-        price,
-        status: 'PENDING',
-        timestamp: new Date()
-      };
-      state.orders.push(newOrder);
-      updateOrdersDisplay();
-    } else {
-      alert('Order failed: ' + (response.error || 'Unknown error'));
-      button.textContent = side;
-      button.disabled = false;
-    }
-  } catch (error) {
-    alert('Order error: ' + error.message);
-    button.textContent = side;
-    button.disabled = false;
+    case 'disconnected':
+      state.connected = false;
+      showLoginView();
+      break;
+      
+    case 'networkHeartbeat':
+      // Update connection status indicator if needed
+      break;
+      
+    case 'positionUpdate':
+      // Update positions
+      break;
+      
+    case 'orderUpdate':
+      // Update orders
+      break;
+      
+    case 'fillUpdate':
+      // Update fills
+      break;
   }
 }
 
-// UI Functions
-function showLoginView() {
-  loginView.style.display = 'block';
-  tradingView.style.display = 'none';
-}
-
-function showTradingView() {
-  loginView.style.display = 'none';
-  tradingView.style.display = 'flex';
-  updateUI();
-}
-
-function showError(message) {
-  loginError.textContent = message;
-  loginError.classList.remove('hidden');
-}
-
-function switchTab(tab) {
-  state.activeTab = tab;
-  
-  // Update tab buttons
-  tabButtons.forEach(button => {
-    if (button.getAttribute('data-tab') === tab) {
-      button.classList.add('active');
-    } else {
-      button.classList.remove('active');
-    }
-  });
-  
-  // Update tab content
-  const tabs = { positions: positionsTab, orders: ordersTab, fills: fillsTab };
-  Object.entries(tabs).forEach(([key, element]) => {
-    if (key === tab) {
-      element.classList.remove('hidden');
-    } else {
-      element.classList.add('hidden');
-    }
-  });
-}
-
+// Main UI update
 function updateUI() {
-  updateAccountDisplay();
-  updateRiskBanner();
+  updateAccountUI();
+  updateCopyTradingUI();
   updatePositionsDisplay();
   updateOrdersDisplay();
   updateFillsDisplay();
 }
 
-function updateAccountDisplay() {
-  const balance = state.accountInfo.balance || 0;
-  accountBalance.textContent = `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+// Global functions for order actions
+window.editOrder = (orderId) => {
+  console.log('Edit order:', orderId);
+  // TODO: Implement edit order
+};
+
+window.cancelOrder = (orderId) => {
+  console.log('Cancel order:', orderId);
+  // TODO: Implement cancel order
+};
+
+// Chart sync functions
+function updateSyncUI() {
+  elements.syncToggle.classList.toggle('active', state.syncEnabled);
 }
 
-function updateRiskBanner() {
-  const loss = Math.abs(state.dailyLoss);
-  const remaining = state.dailyLimit - loss;
-  const percentage = loss / state.dailyLimit;
+function broadcastSymbol() {
+  if (!state.syncEnabled || !state.orderForm.symbol) return;
   
-  riskRemaining.textContent = `$${remaining.toLocaleString('en-US', { minimumFractionDigits: 2 })} remaining`;
-  riskDetails.textContent = `Loss: $${loss.toLocaleString('en-US', { minimumFractionDigits: 2 })} / $${state.dailyLimit.toLocaleString()}`;
-  riskProgressBar.style.width = `${Math.min(percentage * 100, 100)}%`;
-  
-  // Update banner color based on risk level
-  riskBanner.classList.remove('warning', 'danger');
-  if (percentage > 0.9) {
-    riskBanner.classList.add('danger');
-  } else if (percentage > 0.7) {
-    riskBanner.classList.add('warning');
-  }
-}
-
-function updatePositionsDisplay() {
-  // Use mock data for demo
-  state.positions = state.connected ? mockPositions : [];
-  positionsCount.textContent = state.positions.length;
-  
-  const positionsList = document.getElementById('positionsList');
-  const emptyState = positionsTab.querySelector('.empty-state');
-  
-  if (state.positions.length === 0) {
-    positionsList.classList.add('hidden');
-    emptyState.classList.remove('hidden');
-  } else {
-    positionsList.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    
-    positionsList.innerHTML = state.positions.map(position => `
-      <div class="position-item">
-        <div class="position-info">
-          <div class="position-symbol">${position.symbol}</div>
-          <div class="position-details">${position.quantity} @ ${position.avgPrice.toFixed(2)}</div>
-        </div>
-        <div class="position-pnl">
-          <div class="pnl-value ${position.pnl >= 0 ? 'positive' : 'negative'}">
-            ${position.pnl >= 0 ? '+' : ''}$${Math.abs(position.pnl).toFixed(2)}
-          </div>
-          <div class="pnl-percent ${position.pnl >= 0 ? 'positive' : 'negative'}">
-            ${position.pnlPercent >= 0 ? '+' : ''}${position.pnlPercent.toFixed(2)}%
-          </div>
-        </div>
-      </div>
-    `).join('');
-  }
-}
-
-function updateOrdersDisplay() {
-  // Use mock data for demo
-  state.orders = state.connected ? mockOrders : [];
-  ordersCount.textContent = state.orders.length;
-  
-  const ordersList = document.getElementById('ordersList');
-  const emptyState = ordersTab.querySelector('.empty-state');
-  
-  if (state.orders.length === 0) {
-    ordersList.classList.add('hidden');
-    emptyState.classList.remove('hidden');
-  } else {
-    ordersList.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    
-    ordersList.innerHTML = state.orders.map(order => `
-      <div class="order-item">
-        <div class="order-info">
-          <div class="order-header">
-            <span class="order-side ${order.side.toLowerCase()}">${order.side}</span>
-            <span class="order-symbol">${order.symbol}</span>
-          </div>
-          <div class="order-details">
-            ${order.quantity} @ ${order.orderType === 'LMT' ? order.price.toFixed(2) : 'MKT'} • ${order.status}
-          </div>
-        </div>
-        <div class="order-actions">
-          <button class="btn-icon" title="Cancel order">✕</button>
-        </div>
-      </div>
-    `).join('');
-  }
-}
-
-function updateFillsDisplay() {
-  // Use mock data for demo
-  state.fills = state.connected ? mockFills : [];
-  fillsCount.textContent = state.fills.length;
-  
-  const fillsList = document.getElementById('fillsList');
-  const emptyState = fillsTab.querySelector('.empty-state');
-  
-  if (state.fills.length === 0) {
-    fillsList.classList.add('hidden');
-    emptyState.classList.remove('hidden');
-  } else {
-    fillsList.classList.remove('hidden');
-    emptyState.classList.add('hidden');
-    
-    fillsList.innerHTML = state.fills.map(fill => {
-      const time = new Date(fill.timestamp).toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
+  chrome.tabs.query({ url: '*://*.tradingview.com/*' }, (tabs) => {
+    tabs.forEach(tab => {
+      chrome.tabs.sendMessage(tab.id, {
+        type: 'setSymbol',
+        symbol: state.orderForm.symbol
+      }).catch(err => {
+        // Tab might not have content script loaded yet
+        console.log('Could not send symbol to TradingView tab:', err);
       });
-      
-      return `
-        <div class="order-item">
-          <div class="order-info">
-            <div class="order-header">
-              <span class="order-side ${fill.side.toLowerCase()}">${fill.side}</span>
-              <span class="order-symbol">${fill.symbol}</span>
-            </div>
-            <div class="order-details">
-              ${fill.quantity} @ ${fill.price.toFixed(2)} • ${time}
-            </div>
-          </div>
-        </div>
-      `;
-    }).join('');
-  }
+    });
+  });
 }
 
-// Setup drag handle for resizing
-function setupDragHandle() {
-  const dragHandle = document.getElementById('dragHandle');
-  const orderSection = document.querySelector('.order-section');
-  const tabsContainer = document.querySelector('.tabs-container');
-  const contentContainer = document.querySelector('.content-container');
+// Copy trading functions
+function updateCopyTradingUI() {
+  elements.copyToggle.classList.toggle('active', state.copyTradingEnabled);
   
-  if (!dragHandle || !orderSection || !tabsContainer || !contentContainer) return;
-  
-  let isDragging = false;
-  let startY = 0;
-  let startOrderHeight = 0;
-  let startTabsHeight = 0;
-  
-  // Get the current computed heights
-  function getCurrentHeights() {
-    const orderHeight = orderSection.offsetHeight;
-    const tabsHeight = tabsContainer.offsetHeight;
-    return { orderHeight, tabsHeight };
+  // Update info text
+  const liveAccounts = state.accounts.filter(acc => acc.isLive);
+  const accountText = liveAccounts.length === 1 ? '1 live account' : `${liveAccounts.length} live accounts`;
+  elements.copyTradingInfo.textContent = state.copyTradingEnabled 
+    ? `Trading on all ${accountText}` 
+    : `Trade on ${accountText}`;
+    
+  // Update button colors based on state
+  if (state.copyTradingEnabled) {
+    elements.buyBtn.style.background = '#059669'; // Darker green for copy mode
+    elements.sellBtn.style.background = '#dc2626'; // Darker red for copy mode
+  } else {
+    elements.buyBtn.style.background = '';
+    elements.sellBtn.style.background = '';
   }
-  
-  dragHandle.addEventListener('mousedown', (e) => {
-    isDragging = true;
-    startY = e.clientY;
-    const heights = getCurrentHeights();
-    startOrderHeight = heights.orderHeight;
-    startTabsHeight = heights.tabsHeight;
-    
-    // Add dragging styles
-    document.body.style.cursor = 'ns-resize';
-    document.body.style.userSelect = 'none';
-    dragHandle.style.background = '#d1d5db';
-    
-    e.preventDefault();
-  });
-  
-  document.addEventListener('mousemove', (e) => {
-    if (!isDragging) return;
-    
-    const deltaY = e.clientY - startY;
-    const containerHeight = contentContainer.offsetHeight;
-    
-    // Calculate new heights
-    let newOrderHeight = startOrderHeight + deltaY;
-    let newTabsHeight = startTabsHeight - deltaY;
-    
-    // Set minimum heights
-    const minHeight = 150;
-    if (newOrderHeight < minHeight) {
-      newOrderHeight = minHeight;
-      newTabsHeight = containerHeight - minHeight - dragHandle.offsetHeight;
-    }
-    if (newTabsHeight < minHeight) {
-      newTabsHeight = minHeight;
-      newOrderHeight = containerHeight - minHeight - dragHandle.offsetHeight;
-    }
-    
-    // Apply new heights using flex-basis
-    orderSection.style.flexBasis = `${newOrderHeight}px`;
-    tabsContainer.style.flexBasis = `${newTabsHeight}px`;
-  });
-  
-  document.addEventListener('mouseup', () => {
-    if (isDragging) {
-      isDragging = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      dragHandle.style.background = '';
-    }
-  });
 }

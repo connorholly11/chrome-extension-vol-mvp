@@ -28,6 +28,16 @@ export const ProtoMinimal = {
       parts.push(infoBytes);
     }
     
+    // Order = field 6 (repeated)
+    if (obj.Order) {
+      for (const order of obj.Order) {
+        parts.push(this.encodeTag(6, 2)); // field 6, wire type 2
+        const orderBytes = this.encodeOrder(order);
+        parts.push(this.encodeVarint(orderBytes.length));
+        parts.push(orderBytes);
+      }
+    }
+    
     // Combine all parts
     return this.concat(parts);
   },
@@ -71,6 +81,78 @@ export const ProtoMinimal = {
       parts.push(this.encodeVarint(info.RequestId));
     }
     
+    // SubscriptionEnabled = field 3 (optional, try adding it)
+    if (info.SubscriptionEnabled !== undefined) {
+      parts.push(this.encodeTag(3, 0)); // field 3, wire type 0
+      parts.push(this.encodeVarint(info.SubscriptionEnabled ? 1 : 0));
+    }
+    
+    return this.concat(parts);
+  },
+  
+  // Encode Order message
+  encodeOrder(order) {
+    const parts = [];
+    
+    // OrderInsert = field 1
+    if (order.OrderInsert) {
+      parts.push(this.encodeTag(1, 2)); // field 1, wire type 2
+      const insertBytes = this.encodeOrderInsert(order.OrderInsert);
+      parts.push(this.encodeVarint(insertBytes.length));
+      parts.push(insertBytes);
+    }
+    
+    return this.concat(parts);
+  },
+  
+  // Encode OrderInsert message
+  encodeOrderInsert(insert) {
+    const parts = [];
+    
+    // ContractId = field 1
+    if (insert.ContractId !== undefined) {
+      parts.push(this.encodeTag(1, 0)); // field 1, wire type 0
+      parts.push(this.encodeVarint(insert.ContractId));
+    }
+    
+    // SeqClientId = field 2
+    if (insert.SeqClientId !== undefined) {
+      parts.push(this.encodeTag(2, 0)); // field 2, wire type 0
+      parts.push(this.encodeVarint(insert.SeqClientId));
+    }
+    
+    // Quantity = field 3
+    if (insert.Quantity !== undefined) {
+      parts.push(this.encodeTag(3, 0)); // field 3, wire type 0
+      parts.push(this.encodeVarint(insert.Quantity));
+    }
+    
+    // Price = field 4 (double)
+    if (insert.Price !== undefined) {
+      parts.push(this.encodeTag(4, 1)); // field 4, wire type 1 (64-bit)
+      const buffer = new ArrayBuffer(8);
+      new DataView(buffer).setFloat64(0, insert.Price, true);
+      parts.push(new Uint8Array(buffer));
+    }
+    
+    // OrdType = field 5
+    if (insert.OrdType !== undefined) {
+      parts.push(this.encodeTag(5, 0)); // field 5, wire type 0
+      parts.push(this.encodeVarint(insert.OrdType));
+    }
+    
+    // AccNumber = field 10
+    if (insert.AccNumber !== undefined) {
+      parts.push(this.encodeTag(10, 0)); // field 10, wire type 0
+      parts.push(this.encodeVarint(insert.AccNumber));
+    }
+    
+    // Source = field 15
+    if (insert.Source !== undefined) {
+      parts.push(this.encodeTag(15, 0)); // field 15, wire type 0
+      parts.push(this.encodeVarint(insert.Source));
+    }
+    
     return this.concat(parts);
   },
   
@@ -100,22 +182,106 @@ export const ProtoMinimal = {
             }
             break;
             
-          case 2: // InfoResp
+          case 3: // InfoResp (field 3, not 2!)
             if (wireType === 2) {
               const len = this.readVarint(view, offset).value;
               offset += this.readVarint(view, offset).bytes;
-              msg.InfoResp = { data: 'Account/Position data' };
+              
+              // Try to parse the InfoResp content
+              msg.InfoResp = { 
+                length: len,
+                // The content might have a RequestId or status
+              };
               msg.messageType = 'InfoResp';
+              
+              // For debugging - what's inside?
+              if (len > 0 && offset < buffer.byteLength) {
+                const contentStart = offset;
+                const contentBytes = [];
+                for (let i = 0; i < Math.min(len, 10); i++) {
+                  if (contentStart + i < buffer.byteLength) {
+                    contentBytes.push(view.getUint8(contentStart + i).toString(16).padStart(2, '0'));
+                  }
+                }
+                msg.InfoResp.contentBytes = contentBytes.join(' ');
+              }
+              
               offset += len;
             }
             break;
             
-          case 10: // Pong
+          case 2: // Pong
             if (wireType === 2) {
               const len = this.readVarint(view, offset).value;
               offset += this.readVarint(view, offset).bytes;
               msg.Pong = {};
               msg.messageType = 'Pong';
+              offset += len;
+            }
+            break;
+            
+          case 4: // BalanceInfo (repeated)
+            if (wireType === 2) {
+              const len = this.readVarint(view, offset).value;
+              offset += this.readVarint(view, offset).bytes;
+              
+              if (!msg.BalanceInfo) msg.BalanceInfo = [];
+              
+              // Parse the balance message content
+              const balanceEnd = offset + len;
+              const balance = {};
+              
+              while (offset < balanceEnd) {
+                const balTag = view.getUint8(offset++);
+                const balFieldNum = balTag >> 3;
+                const balWireType = balTag & 7;
+                
+                if (balFieldNum === 1 && balWireType === 1) { // Balance (double)
+                  balance.balance = view.getFloat64(offset, true);
+                  offset += 8;
+                } else if (balFieldNum === 2 && balWireType === 0) { // AccountNo (varint)
+                  const accountResult = this.readVarint(view, offset);
+                  balance.accountNo = accountResult.value;
+                  offset += accountResult.bytes;
+                } else {
+                  // Skip unknown fields
+                  if (balWireType === 0) {
+                    const skip = this.readVarint(view, offset);
+                    offset += skip.bytes;
+                  } else if (balWireType === 2) {
+                    const skipLen = this.readVarint(view, offset).value;
+                    offset += this.readVarint(view, offset).bytes + skipLen;
+                  } else if (balWireType === 1) {
+                    offset += 8; // 64-bit fixed
+                  } else if (balWireType === 5) {
+                    offset += 4; // 32-bit fixed
+                  }
+                }
+              }
+              
+              msg.BalanceInfo.push(balance);
+              msg.messageType = 'BalanceInfo';
+            }
+            break;
+            
+          case 7: // OrderInfo (repeated)
+            if (wireType === 2) {
+              const len = this.readVarint(view, offset).value;
+              offset += this.readVarint(view, offset).bytes;
+              if (!msg.OrderInfo) msg.OrderInfo = [];
+              msg.OrderInfo.push({});
+              msg.messageType = 'OrderInfo';
+              offset += len;
+            }
+            break;
+            
+          case 13: // PositionInfo
+            if (wireType === 2) {
+              const len = this.readVarint(view, offset).value;
+              offset += this.readVarint(view, offset).bytes;
+              if (!msg.PositionInfo) msg.PositionInfo = [];
+              msg.PositionInfo.push({});
+              msg.messageType = 'PositionInfo';
               offset += len;
             }
             break;

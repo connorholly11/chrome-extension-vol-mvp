@@ -158,31 +158,53 @@ function stopHeartbeat() {
   }
 }
 
+let nextSeqId = 1;
+let currentAccountNo = null;
+
 async function handlePlaceOrder(order) {
   console.log('Placing order:', order);
   
-  if (!isConnected) {
+  if (!isConnected || !ws) {
     throw new Error('Not connected to trading platform');
   }
   
-  // TODO: Implement actual order placement via WebSocket
-  // For now, just simulate success
-  console.log('Order details:', {
-    symbol: order.symbol,
-    side: order.side,
-    quantity: order.quantity,
-    type: order.orderType,
-    price: order.price
-  });
+  // Get contract ID for symbol
+  const contracts = await chrome.storage.local.get('contracts');
+  const contractId = contracts.contracts?.[order.symbol];
   
-  // Simulate order placement delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  if (!contractId) {
+    throw new Error(`No contract ID found for ${order.symbol}`);
+  }
   
-  return {
-    success: true,
-    orderId: 'SIM-' + Date.now(),
-    message: `${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ MARKET`
-  };
+  try {
+    const orderMsg = {
+      Order: [{
+        OrderInsert: {
+          ContractId: contractId,
+          SeqClientId: nextSeqId++,
+          Quantity: order.side === 'sell' ? -Math.abs(order.quantity) : Math.abs(order.quantity),
+          Price: order.price || 0,
+          OrdType: order.orderType === 'limit' ? 1 : 0, // 0=Market, 1=Limit
+          AccNumber: currentAccountNo || 0,
+          Source: 0 // Manual
+        }
+      }]
+    };
+    
+    const buffer = ProtoMinimal.encodeClientRequest(orderMsg);
+    ws.send(buffer);
+    
+    console.log('Order sent to Volumetrica:', orderMsg);
+    
+    return {
+      success: true,
+      orderId: 'ORD-' + (nextSeqId - 1),
+      message: `${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ ${order.orderType.toUpperCase()}`
+    };
+  } catch (err) {
+    console.error('Order placement error:', err);
+    throw err;
+  }
 }
 
 // Simple WebSocket connection for order management
@@ -265,20 +287,17 @@ async function connectWebSocket(endpoint, token) {
           
           resolve();
         } else if (msg.InfoResp) {
-          console.log('Account data response received');
-          // TODO: Parse and forward to UI
-        } else if (msg.AccountHeaderMsg) {
-          console.log('Account info received');
+          console.log('Account/Position data response received');
+          // For now, let's see if we get more messages after this
+          // The InfoResp might be followed by actual account data
+        } else if (msg.BalanceInfo) {
+          console.log('Balance update received:', msg.BalanceInfo);
           // TODO: Forward to UI
-          chrome.runtime.sendMessage({
-            type: 'accounts:update',
-            accounts: msg.AccountHeaderMsg.accounts
-          }).catch(() => {});
-        } else if (msg.PositionUpdMsg) {
-          console.log('Position update received');
+        } else if (msg.OrderInfo) {
+          console.log('Order update received:', msg.OrderInfo);
           // TODO: Forward to UI
-        } else if (msg.OrderInfoMsg) {
-          console.log('Order update received');
+        } else if (msg.PositionInfo) {
+          console.log('Position update received:', msg.PositionInfo);
           // TODO: Forward to UI
         } else if (msg.Pong) {
           console.log('Pong received');
@@ -298,16 +317,34 @@ function requestInitialData() {
   console.log('Requesting initial account data...');
   
   try {
-    const infoMsg = {
+    // First, request just accounts (mode 1)
+    const accountMsg = {
       InfoReq: {
-        Modes: [1, 2, 3], // Account, OrdAndPos, Positions
-        RequestId: 1
+        Modes: [1], // Just Account first
+        RequestId: 1,
+        SubscriptionEnabled: true
       }
     };
     
-    const buffer = ProtoMinimal.encodeClientRequest(infoMsg);
+    const buffer = ProtoMinimal.encodeClientRequest(accountMsg);
     ws.send(buffer);
-    console.log('Initial data request sent');
+    console.log('Account request sent');
+    
+    // Then request positions/orders after a short delay
+    setTimeout(() => {
+      const posMsg = {
+        InfoReq: {
+          Modes: [2, 3], // OrdAndPos, Positions
+          RequestId: 2,
+          SubscriptionEnabled: true
+        }
+      };
+      
+      const posBuffer = ProtoMinimal.encodeClientRequest(posMsg);
+      ws.send(posBuffer);
+      console.log('Position/Order request sent');
+    }, 1000);
+    
   } catch (err) {
     console.error('Failed to request initial data:', err);
   }

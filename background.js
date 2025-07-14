@@ -292,7 +292,27 @@ async function connectWebSocket(endpoint, token) {
           // The InfoResp might be followed by actual account data
         } else if (msg.BalanceInfo) {
           console.log('Balance update received:', msg.BalanceInfo);
-          // TODO: Forward to UI
+          
+          // Transform Volumetrica balance data to UI format
+          const accounts = msg.BalanceInfo.map((bal, index) => ({
+            id: `vol-${bal.accountNo}`,
+            name: `Account ${bal.accountNo}`,
+            balance: bal.balance,
+            isLive: true,
+            platform: 'Traders Launch',
+            accountNo: bal.accountNo // Keep original account number for order placement
+          }));
+          
+          // Forward to UI
+          chrome.runtime.sendMessage({
+            type: 'accounts:update',
+            accounts: accounts
+          }).catch(() => {});
+          
+          // If we have accounts but no selected account, select the first one
+          if (accounts.length > 0 && !currentAccountNo) {
+            currentAccountNo = accounts[0].accountNo;
+          }
         } else if (msg.OrderInfo) {
           console.log('Order update received:', msg.OrderInfo);
           // TODO: Forward to UI

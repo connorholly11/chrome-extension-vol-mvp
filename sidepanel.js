@@ -792,6 +792,25 @@ async function handleDisconnect() {
 
 function handleBackgroundMessage(message) {
   switch (message.type) {
+    case 'accounts:update':
+      if (message.accounts && message.accounts.length > 0) {
+        // Replace mock accounts with real ones from Volumetrica
+        state.accounts = message.accounts;
+        
+        // Update selected account if it exists in the new list
+        const currentSelected = state.accounts.find(acc => acc.id === state.selectedAccount.id);
+        if (currentSelected) {
+          state.selectedAccount = currentSelected;
+        } else {
+          // Otherwise select the first account
+          state.selectedAccount = state.accounts[0];
+        }
+        
+        updateAccountUI();
+        updateAccountDropdown();
+      }
+      break;
+      
     case 'accountUpdate':
       if (message.data) {
         state.selectedAccount.balance = message.data.balance || state.selectedAccount.balance;

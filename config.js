@@ -1,4 +1,8 @@
 // config.js - Central configuration for the extension
+
+// Set environment mode (can be changed for testing)
+export const MODE = 'prod'; // 'prod' | 'staging'
+
 export const ENVIRONMENTS = {
   prod: {
     FUTURES: {
@@ -26,6 +30,6 @@ export const ENVIRONMENTS = {
   }
 };
 
-export function getEnv(line = 'FUTURES', tier = 'prod') {
+export function getEnv(line = 'FUTURES', tier = MODE) {
   return ENVIRONMENTS[tier][line];
 }

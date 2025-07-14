@@ -10,7 +10,7 @@
     "dev": "npm run build && echo 'Load dist/ folder in Chrome extensions'"
   },
   "dependencies": {
-    "protobufjs": "^7.2.5"
+    "protobufjs": "^7.5.3"
   },
   "devDependencies": {
     "esbuild": "^0.19.11",

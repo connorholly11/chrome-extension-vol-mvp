@@ -44,7 +44,9 @@ const staticFiles = [
   'sidepanel.html',
   'icon-16.png',
   'icon-48.png',
-  'icon-128.png'
+  'icon-128.png',
+  'tradingview-content.js',
+  'proto-minimal.js'
 ];
 
 for (const file of staticFiles) {

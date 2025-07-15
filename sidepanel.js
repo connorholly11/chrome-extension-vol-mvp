@@ -709,14 +709,21 @@ async function handleLogin(e) {
       
       // Wait a moment for accounts to be stored, then load them
       setTimeout(async () => {
-        const stored = await chrome.storage.local.get('volumetricaAccounts');
+        const stored = await chrome.storage.local.get(['volumetricaAccounts', 'volumetricaPositions']);
         if (stored.volumetricaAccounts && stored.volumetricaAccounts.length > 0) {
           state.accounts = stored.volumetricaAccounts;
           state.selectedAccount = state.accounts[0];
           updateAccountUI();
           updateAccountDropdown();
         }
-      }, 1000);
+        
+        // Load positions
+        if (stored.volumetricaPositions) {
+          realPositions.length = 0;
+          realPositions.push(...stored.volumetricaPositions);
+          updatePositionsDisplay();
+        }
+      }, 2000); // Give a bit more time for position data
       
       showTradingView();
       updateUI();
@@ -755,12 +762,19 @@ async function checkConnectionStatus() {
       state.connected = true;
       
       // Load accounts from storage
-      const stored = await chrome.storage.local.get('volumetricaAccounts');
+      const stored = await chrome.storage.local.get(['volumetricaAccounts', 'volumetricaPositions']);
       if (stored.volumetricaAccounts && stored.volumetricaAccounts.length > 0) {
         state.accounts = stored.volumetricaAccounts;
         state.selectedAccount = state.accounts[0];
         updateAccountUI();
         updateAccountDropdown();
+      }
+      
+      // Load positions from storage
+      if (stored.volumetricaPositions) {
+        realPositions.length = 0;
+        realPositions.push(...stored.volumetricaPositions);
+        updatePositionsDisplay();
       }
       
       showTradingView();

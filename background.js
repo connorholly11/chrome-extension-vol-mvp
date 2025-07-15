@@ -21,6 +21,7 @@ let wsToken = null;
 let ws = null;
 let isConnected = false;
 let heartbeatInterval = null;
+let balanceLogged = false;
 
 // Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -259,22 +260,27 @@ async function connectWebSocket(endpoint, token) {
     };
     
     ws.onmessage = (event) => {
-      console.log('WebSocket message received, size:', event.data.byteLength);
-      
       try {
         const msg = ProtoMinimal.decodeServerResponse(event.data);
         
-        if (msg.messageType) {
-          console.log(`Message type: ${msg.messageType}`, msg);
+        // Skip logging for balance updates after the first one
+        if (msg.messageType === 'BalanceInfo' && balanceLogged) {
+          // Still process the message, just don't log it
         } else {
-          console.log('Unknown message format:', msg);
-          // Log first few bytes for debugging
-          const view = new DataView(event.data);
-          const bytes = [];
-          for (let i = 0; i < Math.min(10, event.data.byteLength); i++) {
-            bytes.push(view.getUint8(i).toString(16).padStart(2, '0'));
+          console.log('WebSocket message received, size:', event.data.byteLength);
+          
+          if (msg.messageType) {
+            console.log(`Message type: ${msg.messageType}`, msg);
+          } else {
+            console.log('Unknown message format:', msg);
+            // Log first few bytes for debugging
+            const view = new DataView(event.data);
+            const bytes = [];
+            for (let i = 0; i < Math.min(10, event.data.byteLength); i++) {
+              bytes.push(view.getUint8(i).toString(16).padStart(2, '0'));
+            }
+            console.log('First bytes:', bytes.join(' '));
           }
-          console.log('First bytes:', bytes.join(' '));
         }
         
         if (msg.LoginResp) {
@@ -288,15 +294,47 @@ async function connectWebSocket(endpoint, token) {
           resolve();
         } else if (msg.InfoResp) {
           console.log('Account/Position data response received');
-          // For now, let's see if we get more messages after this
-          // The InfoResp might be followed by actual account data
-        } else if (msg.BalanceInfo) {
-          console.log('Balance update received:', msg.BalanceInfo);
           
-          // Log the actual data we're getting
-          msg.BalanceInfo.forEach((bal, i) => {
-            console.log(`Account ${i}: accountNo=${bal.accountNo}, balance=${bal.balance}`);
-          });
+          // Check if we have position data
+          if (msg.InfoResp.positions && msg.InfoResp.positions.length > 0) {
+            console.log('Positions found:', msg.InfoResp.positions);
+            
+            // Transform position data to UI format
+            const positions = msg.InfoResp.positions.map(pos => {
+              console.log('Raw position data:', pos);
+              
+              // The Micro NASDAQ symbol needs to be simplified for UI
+              let displaySymbol = pos.symbol || 'Unknown';
+              if (displaySymbol.includes('MNQU')) {
+                displaySymbol = 'MNQ'; // Micro NASDAQ
+              }
+              
+              return {
+                symbol: displaySymbol,
+                contractId: pos.contractId,
+                quantity: pos.accountNo || 1, // accountNo field seems to contain quantity
+                side: pos.quantity > 0 ? 'LONG' : 'SHORT', // quantity field has the side
+                accountNo: pos.side || currentAccountNo, // side field has account number
+                avgPrice: pos.value1 || 0, // value1 seems to be the price
+                currentPrice: pos.value1 || 0, // For now, use same price
+                pnl: 0, // Calculate later
+                pnlPercent: 0
+              };
+            });
+            
+            // Store positions for UI
+            chrome.storage.local.set({ volumetricaPositions: positions });
+            console.log('Parsed positions:', positions);
+          }
+        } else if (msg.BalanceInfo) {
+          // Only log first balance update to reduce spam
+          if (!balanceLogged) {
+            console.log('Balance update received:', msg.BalanceInfo);
+            msg.BalanceInfo.forEach((bal, i) => {
+              console.log(`Account ${i}: accountNo=${bal.accountNo}, balance=${bal.balance}`);
+            });
+            balanceLogged = true;
+          }
           
           // Transform Volumetrica balance data to UI format
           const accounts = msg.BalanceInfo.map((bal, index) => ({
@@ -310,25 +348,16 @@ async function connectWebSocket(endpoint, token) {
           
           // Store accounts for later retrieval
           chrome.storage.local.set({ volumetricaAccounts: accounts });
-          
-          // If we have accounts but no selected account, select the first one
-          if (accounts.length > 0 && !currentAccountNo) {
-            currentAccountNo = accounts[0].accountNo;
-          }
-          
-          // Try to send to all tabs/windows
-          chrome.runtime.sendMessage({
-            type: 'accounts:update', 
-            accounts: accounts
-          }).catch(err => {
-            console.log('Failed to send accounts update:', err);
-          });
         } else if (msg.OrderInfo) {
           console.log('Order update received:', msg.OrderInfo);
           // TODO: Forward to UI
         } else if (msg.PositionInfo) {
           console.log('Position update received:', msg.PositionInfo);
-          // TODO: Forward to UI
+          console.log('Raw position data:', JSON.stringify(msg.PositionInfo, null, 2));
+          // TODO: Parse and forward to UI
+        } else if (msg.PositionUpdMsg) {
+          console.log('Position update message received:', msg.PositionUpdMsg);
+          // TODO: Parse and forward to UI
         } else if (msg.Pong) {
           console.log('Pong received');
         }
@@ -352,7 +381,7 @@ function requestInitialData() {
       InfoReq: {
         Modes: [1], // Just Account first
         RequestId: 1,
-        SubscriptionEnabled: true
+        SubscriptionEnabled: false // Just get snapshot for testing
       }
     };
     
@@ -366,7 +395,7 @@ function requestInitialData() {
         InfoReq: {
           Modes: [2, 3], // OrdAndPos, Positions
           RequestId: 2,
-          SubscriptionEnabled: true
+          SubscriptionEnabled: false // Just get snapshot for testing
         }
       };
       

@@ -187,26 +187,106 @@ export const ProtoMinimal = {
               const len = this.readVarint(view, offset).value;
               offset += this.readVarint(view, offset).bytes;
               
-              // Try to parse the InfoResp content
               msg.InfoResp = { 
-                length: len,
-                // The content might have a RequestId or status
+                length: len
               };
               msg.messageType = 'InfoResp';
               
-              // For debugging - what's inside?
-              if (len > 0 && offset < buffer.byteLength) {
-                const contentStart = offset;
-                const contentBytes = [];
-                for (let i = 0; i < Math.min(len, 10); i++) {
-                  if (contentStart + i < buffer.byteLength) {
-                    contentBytes.push(view.getUint8(contentStart + i).toString(16).padStart(2, '0'));
+              // Parse InfoResp content
+              const infoEnd = offset + len;
+              while (offset < infoEnd) {
+                const infoTag = view.getUint8(offset++);
+                const infoFieldNum = infoTag >> 3;
+                const infoWireType = infoTag & 7;
+                
+                if (infoFieldNum === 2 && infoWireType === 0) { // RequestId
+                  const reqId = this.readVarint(view, offset);
+                  msg.InfoResp.requestId = reqId.value;
+                  offset += reqId.bytes;
+                } else if (infoFieldNum === 4 && infoWireType === 2) { // Position data
+                  const posLen = this.readVarint(view, offset).value;
+                  offset += this.readVarint(view, offset).bytes;
+                  
+                  if (!msg.InfoResp.positions) msg.InfoResp.positions = [];
+                  
+                  // Parse position data
+                  const posEnd = offset + posLen;
+                  const position = {};
+                  
+                  // Log raw bytes for debugging
+                  const posBytes = [];
+                  for (let i = 0; i < Math.min(posLen, 20); i++) {
+                    posBytes.push(view.getUint8(offset + i).toString(16).padStart(2, '0'));
+                  }
+                  console.log('Position data in InfoResp:', posBytes.join(' '));
+                  
+                  while (offset < posEnd) {
+                    const posTag = view.getUint8(offset++);
+                    const posFieldNum = posTag >> 3;
+                    const posWireType = posTag & 7;
+                    
+                    if (posFieldNum === 1 && posWireType === 0) { // Contract ID
+                      const contractId = this.readVarint(view, offset);
+                      position.contractId = contractId.value;
+                      offset += contractId.bytes;
+                    } else if (posFieldNum === 2 && posWireType === 0) { // Position type/status
+                      const type = this.readVarint(view, offset);
+                      position.type = type.value;
+                      offset += type.bytes;
+                    } else if (posFieldNum === 3 && posWireType === 1) { // Double value (quantity?)
+                      position.value1 = view.getFloat64(offset, true);
+                      offset += 8;
+                    } else if (posFieldNum === 4 && posWireType === 1) { // Another double
+                      position.value2 = view.getFloat64(offset, true);
+                      offset += 8;
+                    } else if (posFieldNum === 8 && posWireType === 0) { // Account number
+                      const accNo = this.readVarint(view, offset);
+                      position.accountNo = accNo.value;
+                      offset += accNo.bytes;
+                    } else if (posFieldNum === 11 && posWireType === 0) { // Quantity
+                      const qty = this.readVarint(view, offset);
+                      position.quantity = qty.value;
+                      offset += qty.bytes;
+                    } else if (posFieldNum === 12 && posWireType === 0) { // Side (1=buy, 2=sell)
+                      const side = this.readVarint(view, offset);
+                      position.side = side.value;
+                      offset += side.bytes;
+                    } else if (posFieldNum === 13 && posWireType === 2) { // Symbol string
+                      const symLen = this.readVarint(view, offset).value;
+                      offset += this.readVarint(view, offset).bytes;
+                      const decoder = new TextDecoder();
+                      position.symbol = decoder.decode(new Uint8Array(view.buffer, view.byteOffset + offset, symLen));
+                      offset += symLen;
+                    } else {
+                      // Skip unknown fields
+                      if (posWireType === 0) {
+                        const skip = this.readVarint(view, offset);
+                        offset += skip.bytes;
+                      } else if (posWireType === 2) {
+                        const skipLen = this.readVarint(view, offset).value;
+                        offset += this.readVarint(view, offset).bytes + skipLen;
+                      } else if (posWireType === 1) {
+                        offset += 8;
+                      } else if (posWireType === 5) {
+                        offset += 4;
+                      }
+                    }
+                  }
+                  
+                  msg.InfoResp.positions.push(position);
+                } else {
+                  // Skip unknown fields
+                  if (infoWireType === 0) {
+                    const skip = this.readVarint(view, offset);
+                    offset += skip.bytes;
+                  } else if (infoWireType === 2) {
+                    const skipLen = this.readVarint(view, offset).value;
+                    offset += this.readVarint(view, offset).bytes + skipLen;
+                  } else {
+                    offset += 8;
                   }
                 }
-                msg.InfoResp.contentBytes = contentBytes.join(' ');
               }
-              
-              offset += len;
             }
             break;
             

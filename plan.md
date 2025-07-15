@@ -9,11 +9,78 @@
 - ✅ **Step 2: Live Data Feed** - Account data working! 🎉
   - ✅ BalanceInfo parsing - showing real account balances
   - ✅ Account switching in UI
+  - ✅ Removed ALL mock data
+  - ✅ Chrome storage for data persistence
   - ⏳ Positions parsing
   - ⏳ Orders parsing
 - ⬜ **Step 3: Order Placement**
 - ⬜ **Step 4: Minimal Resilience**
 - ⬜ **Step 5: QA & Ship**
+
+## 📝 What We've Done So Far
+
+### 1. Authentication & WebSocket Connection ✅
+- Connected to Volumetrica's trading API using the prop firm's PLT_KEY
+- Implemented binary WebSocket with protobuf encoding
+- Custom minimal protobuf parser (proto-minimal.js) to avoid service worker issues
+- Proper login flow with token-based auth
+
+### 2. Account Data Integration ✅
+- Successfully parsing BalanceInfo messages (field 4, wire type 2)
+- Accounts show real-time balances from Volumetrica
+- Account switching works in the UI
+- Using Chrome storage to persist account data between sidepanel and background
+
+### 3. Clean Architecture ✅
+- Removed ALL mock data from the extension
+- Data flow: Volumetrica → Background → Chrome Storage → Sidepanel
+- Disabled subscriptions for testing (cleaner console output)
+
+## 🚀 Next Steps
+
+### Immediate: Parse Positions & Orders
+1. **Identify Position Message Structure**
+   - Currently seeing 138-byte InfoResp after position request
+   - Need to parse field numbers and data types
+   - Test with open position to see data structure
+
+2. **Update proto-minimal.js**
+   - Add position parser similar to BalanceInfo
+   - Parse contract ID, quantity, avg price, P&L
+   - Handle both PositionInfo and PositionUpdMsg
+
+3. **Forward to UI**
+   - Store positions in Chrome storage
+   - Update sidepanel to display real positions
+   - Remove "No positions" placeholder
+
+### Then: Order Placement
+1. Map UI symbols (ES, NQ) to Volumetrica contract IDs
+2. Use real account numbers from BalanceInfo
+3. Implement order confirmation flow
+
+### Finally: Production Ready
+1. Re-enable subscriptions for real-time updates
+2. Add reconnection logic
+3. Error handling and user feedback
+
+## 🔧 Troubleshooting / Known Issues
+
+### Service Worker Crashes
+- **Problem**: Full protobuf.js library crashes service workers
+- **Solution**: Created proto-minimal.js with custom encoder/decoder
+
+### Message Passing Between Background and Sidepanel
+- **Problem**: chrome.runtime.sendMessage doesn't work from background to sidepanel
+- **Solution**: Use chrome.storage.local as intermediary
+
+### Balance Update Spam
+- **Problem**: With SubscriptionEnabled: true, getting balance updates every few ms
+- **Solution**: Set SubscriptionEnabled: false for testing, or limit logging
+
+### Finding Field Numbers
+- **Method**: Log raw bytes, check field number (tag >> 3) and wire type (tag & 7)
+- **Example**: BalanceInfo uses field 1 for balance (double), field 2 for accountNo (varint)
 
 ---
 

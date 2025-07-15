@@ -590,7 +590,7 @@ function updateOrdersDisplay() {
             <div style="display: flex; align-items: center; gap: 6px;">
               ${statusIcon}
               <span class="order-symbol">${order.symbol || 'MNQ'}</span>
-              <span class="order-side ${order.side ? order.side.toLowerCase() : order.PendingQty < 0 ? 'sell' : 'buy'}">${order.side || (order.PendingQty < 0 ? 'SELL' : 'BUY')}</span>
+              <span class="order-side ${order.side ? (typeof order.side === 'string' ? order.side.toLowerCase() : 'buy') : order.PendingQty < 0 ? 'sell' : 'buy'}">${order.side || (order.PendingQty < 0 ? 'SELL' : 'BUY')}</span>
             </div>
             <div class="order-actions">
               <button class="btn-mini" onclick="editOrder('${order.id}')">

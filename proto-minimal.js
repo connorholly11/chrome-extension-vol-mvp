@@ -141,10 +141,12 @@ export const ProtoMinimal = {
       parts.push(this.encodeVarint(insert.OrderType));
     }
     
-    // AccNumber = field 6
+    // AccNumber = field 6 (sint64)
     if (insert.AccNumber !== undefined) {
       parts.push(this.encodeTag(6, 0)); // field 6, wire type 0
-      parts.push(this.encodeSInt64(insert.AccNumber)); // Use signed int encoding
+      // For sint64 in protobuf, we need signed varint encoding
+      // The issue might be that we need to send it as a regular varint
+      parts.push(this.encodeVarint(insert.AccNumber));
     }
     
     // Source = field 15
@@ -502,11 +504,18 @@ export const ProtoMinimal = {
               // Parse OrderInfoMsg content
               const orderEnd = offset + len;
               const orderInfo = {};
+              const seenFields = new Set();
               
               while (offset < orderEnd) {
                 const orderTag = view.getUint8(offset++);
                 const orderFieldNum = orderTag >> 3;
                 const orderWireType = orderTag & 7;
+                
+                // Log unique fields
+                if (!seenFields.has(orderFieldNum)) {
+                  seenFields.add(orderFieldNum);
+                  console.log(`OrderInfo field ${orderFieldNum} (wire type ${orderWireType})`);
+                }
                 
                 if (orderFieldNum === 1 && orderWireType === 0) { // ContractId
                   const contractId = this.readVarint(view, offset);
@@ -538,10 +547,11 @@ export const ProtoMinimal = {
                   const decoder = new TextDecoder();
                   orderInfo.InfoText = decoder.decode(new Uint8Array(view.buffer, view.byteOffset + offset, reasonLen));
                   offset += reasonLen;
-                } else if (orderFieldNum === 14 && orderWireType === 0) { // AccNumber (field 14, not 16)
+                } else if (orderFieldNum === 14 && orderWireType === 0) { // AccNumber (field 14)
                   const accNo = this.readVarint(view, offset);
                   orderInfo.AccNumber = accNo.value;
                   offset += accNo.bytes;
+                  console.log('Parsed AccNumber from OrderInfo:', accNo.value);
                 } else {
                   // Skip unknown fields
                   if (orderWireType === 0) {

@@ -210,6 +210,12 @@ async function handlePlaceOrder(order, accountNo) {
     
     console.log('Encoding order message...');
     const buffer = ProtoMinimal.encodeClientRequest(orderMsg);
+    
+    // Debug: Log the raw bytes being sent
+    const bytes = Array.from(new Uint8Array(buffer));
+    console.log('Raw order bytes:', bytes.map(b => b.toString(16).padStart(2, '0')).join(' '));
+    console.log('Buffer length:', buffer.byteLength);
+    
     console.log('Sending order to WebSocket...');
     ws.send(buffer);
     

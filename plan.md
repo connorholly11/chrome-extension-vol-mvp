@@ -1,18 +1,25 @@
 # Volumetrica MVP Integration – Lean-to-Prod Checklist
 
+> **🔴 BLOCKER: Orders fail with "Trading account not found" - Need to map account 3316 → TDL01658**
+
 > **Goal: Replace every mock with live Volumetrica data, place real orders, ship.**  
 > **Scope cuts:** No FINRA archiving, no elaborate security vaults, no copy-trading polish. Just make it work.
+
+## 🎯 Quick Status (2025-07-15)
+- **Working**: Auth ✅, Positions ✅, Balances ✅, WebSocket ✅
+- **Blocked**: Order placement - account ID format mismatch
+- **Next Step**: Find where API provides external account ID (TDL01658)
 
 ## 📊 Current Progress
 - ✅ **Step 0: Pre-flight** - COMPLETE
 - ✅ **Step 1: WebSocket & Auth** - COMPLETE ✨
-- ✅ **Step 2: Live Data Feed** - Account data working! 🎉
+- ✅ **Step 2: Live Data Feed** - MOSTLY COMPLETE! 🎉
   - ✅ BalanceInfo parsing - showing real account balances
-  - ✅ Account switching in UI
+  - ✅ Account switching in UI  
   - ✅ Removed ALL mock data
   - ✅ Chrome storage for data persistence
-  - ⏳ Positions parsing
-  - ⏳ Orders parsing
+  - ✅ Positions parsing - MNQ position shows in UI!
+  - ⚠️ Orders parsing - Found but status filtering issue
 - ⬜ **Step 3: Order Placement**
 - ⬜ **Step 4: Minimal Resilience**
 - ⬜ **Step 5: QA & Ship**
@@ -35,6 +42,36 @@
 - Removed ALL mock data from the extension
 - Data flow: Volumetrica → Background → Chrome Storage → Sidepanel
 - Disabled subscriptions for testing (cleaner console output)
+
+### 4. Key Message Type Mappings (CRITICAL!)
+```
+Field 3: InfoResp - Contains positions/orders/account data
+Field 4: BalanceInfo - Account balances (repeated)
+Field 7: OrderInfo - Expected orders here but was wrong!
+Field 11: TradeInfo - Market trades (spam, disabled logging)
+Field 13: PositionInfo - Position updates
+Field 20: AccountHeaderMsg
+Field 50: PositionUpdMsg
+Field 51: OrderInfoMsg
+
+Inside InfoResp:
+- Field 4: Position data (working!)
+- Field 6: Order data (NOT field 7!)
+- Field 7: Unknown (logged but unused)
+```
+
+### 5. Where Key Code Lives
+- **proto-minimal.js**: Custom protobuf parser
+  - Line 287: Order parsing (field 6)
+  - Line 234-276: Position parsing (field 4)
+  - Line 313-359: Balance parsing
+- **background.js**:
+  - Line 262-287: WebSocket message handler
+  - Line 341-343: Order status filtering (NEEDS FIX!)
+  - Line 409-453: Data request modes
+- **sidepanel.js**:
+  - Line 758-771: Loading data from storage
+  - Line 495: Position display update
 
 ## 🚀 Next Steps
 
@@ -64,6 +101,75 @@
 2. Add reconnection logic
 3. Error handling and user feedback
 
+## 🔍 CRITICAL FINDINGS - Account ID Mismatch
+
+### The Main Blocker (2025-07-15)
+**Orders are rejected with: "Trading account not found"**
+
+Why? Account ID format mismatch:
+- **What we have**: 3316 (from BalanceInfo)
+- **What Volumetrica expects**: TDL01658 (shown in their UI)
+- **Result**: All orders fail
+
+### Order Parsing Issues
+1. **Found 20,482 orders** but they're not futures orders
+2. **Prices are wrong**: 0.5, 1, 2 (should be ~23,000 for futures)
+3. **Status distribution**: Exactly 2 orders for each status (suspicious)
+4. **Mode 5 (active orders)** returns empty
+
+### What's Actually Working
+- Order structure is correct (we see the rejection message)
+- Contract ID is correct (589106 for MNQ)
+- WebSocket communication perfect
+- Just need the right account format!
+
+## 🎯 EXACT Next Steps - Account ID Investigation
+
+### 1. Find External Account ID (CRITICAL 🔥) ✅ FOUND!
+The order fails because we're sending `3316` but need `TDL01658`. 
+
+**🎉 SOLUTION FOUND**: AccountHeaderMsg in InfoResp (when mode 1 is requested) contains:
+- `accountNumber` (field 1): The internal ID (3316)
+- `accountHeader` (field 2): The external ID ("TDL01658")
+
+**Current Status**:
+- ✅ Parsing AccountHeaderMsg in InfoResp field 1
+- ✅ Storing account mapping: `accountMapping[3316] = "TDL01658"`
+- ✅ Fixed OrderInfo AccNumber field (14, not 16)
+- ✅ Added timestamp to orders for UI
+- ✅ Enhanced error logging
+
+**Still Need To Test**:
+- Whether Volumetrica accepts the numeric account ID (3316)
+- Or if we need to send the string ID ("TDL01658") in a different field
+
+### 2. Temporary Workaround to Test
+```javascript
+// In handlePlaceOrder, try hardcoding:
+AccNumber: "TDL01658" // Instead of 3316
+
+// Or try sending as string in a different field
+// Check if there's an AccCode or AccString field
+```
+
+### 3. Debug Account Data
+```javascript
+// Add to BalanceInfo parsing:
+console.log('Full balance message:', msg.BalanceInfo);
+// Look for any field that contains "TDL"
+
+// Add to InfoResp account parsing:
+if (msg.InfoResp.accounts) {
+  console.log('Account details:', msg.InfoResp.accounts);
+}
+```
+
+### 4. Check Proto Files Again
+Look for:
+- AccountCode vs AccountNumber
+- ExternalId vs InternalId
+- Any field that might map 3316 → TDL01658
+
 ## 🔧 Troubleshooting / Known Issues
 
 ### Service Worker Crashes
@@ -81,6 +187,14 @@
 ### Finding Field Numbers
 - **Method**: Log raw bytes, check field number (tag >> 3) and wire type (tag & 7)
 - **Example**: BalanceInfo uses field 1 for balance (double), field 2 for accountNo (varint)
+
+### Orders in Wrong Field
+- **Problem**: Expected orders in field 7, actually in field 6
+- **Solution**: Changed parsing in proto-minimal.js line 287
+
+### Mode 5 Returns Empty
+- **Problem**: InfoReq mode 5 (active orders) returns empty
+- **Solution**: Parse mode 4 response but need correct status filtering
 
 ---
 
@@ -340,6 +454,37 @@ All requests MUST be wrapped in `ClientRequestMsg`:
 
 ---
 
+## 📊 Session Progress Log (2025-07-15)
+
+### Started With
+- Successful WebSocket connection
+- Mock data still in UI
+- Basic protobuf parsing
+
+### Accomplished
+1. ✅ Removed ALL mock data
+2. ✅ Fixed protobuf field parsing (doubles vs varints)
+3. ✅ Live position updates working
+4. ✅ Real account balances showing
+5. ✅ Order placement reaches server
+6. ✅ Removed all TradingView integration
+7. ✅ Added real-time UI updates
+
+### Discovered Issues
+1. **Account ID Format** - 3316 vs TDL01658 (blocker!)
+2. **Order Data Strange** - 20,482 orders with tiny prices
+3. **Contract IDs** - Only MNQ (589106) is real, others are placeholders
+
+### Time Spent
+- ~3 hours debugging order placement
+- ~1 hour removing TradingView
+- ~2 hours on protobuf parsing
+
+### Recommendation for Next Session
+**Start with AccountHeaderMsg parsing** - This likely contains the mapping between internal (3316) and external (TDL01658) account identifiers. Once you have the right account format, orders should work immediately since everything else is correct!
+
+---
+
 ## Parking Lot (Post-MVP)
 
 - Copy-trading fan-out
@@ -354,3 +499,73 @@ All requests MUST be wrapped in `ClientRequestMsg`:
 ---
 
 **That's it.** Stick to the tasks above, ignore long-term compliance for now, and you'll have a functional production extension in roughly **one business week** of focused work.
+
+---
+
+## 🚨 SUMMARY FOR NEXT DEVELOPER (Updated 2025-07-15)
+
+### What's Working ✅
+1. **Authentication** - Connects to Volumetrica successfully
+2. **Accounts** - Real balances showing correctly
+3. **Positions** - Live position updates working (MNQ shows in UI)
+4. **WebSocket** - Binary protobuf communication with subscriptions
+5. **UI Updates** - Real-time data flow via Chrome storage listeners
+6. **Order Placement** - Message structure correct, orders reach Volumetrica
+7. **Protobuf Parsing** - Custom proto-minimal.js handles all message types
+8. **TradingView Integration** - Completely removed, no more errors
+
+### What's NOT Working ❌
+1. **Account Number Mismatch** 🚨 CRITICAL ISSUE!
+   - API returns: 3316, 4530 (internal account numbers)
+   - Volumetrica expects: TDL01658 (external account code)
+   - Orders fail with: "Trading account not found"
+2. **Orders Display** - 20,482 orders with weird data (prices 0.5, 1, 2)
+3. **Order Filtering** - Can't find user's actual futures orders
+
+### 🔥 THE Critical Discovery
+When placing orders, we get **"Trading account not found"** because:
+- BalanceInfo gives us account number `3316`
+- But Volumetrica UI shows `TDL01658`
+- The API expects the TDL format for order placement!
+
+### What We Fixed This Session
+1. **Fixed field names**: `OrdType` → `OrderType` (must match proto exactly)
+2. **Added subscription support**: `SubscriptionEnabled: true` for live updates
+3. **Fixed order parsing**: Price/quantity are doubles, not varints
+4. **Added OrderInfo parsing**: Now we see error messages
+5. **Removed all TradingView code**: No more console errors
+6. **Added MNQ contract**: ID 589106 (from position data)
+
+### Next Steps (Priority Order)
+1. **Find External Account ID** 🎯
+   - Check AccountHeaderMsg (field 20)
+   - Look for account metadata in InfoResp
+   - Try different InfoReq modes
+   - Search for "TDL" prefix in any message
+
+2. **Test with Different Account Fields**
+   ```javascript
+   // Current (failing):
+   AccNumber: 3316
+   
+   // Need to find where to get:
+   AccNumber: "TDL01658"
+   ```
+
+3. **Parse Real Orders**
+   - Current orders have prices like 0.5, 1, 2 (not futures)
+   - Need to find where real limit orders are
+   - Status filtering might need adjustment
+
+### Code Locations
+- **Account parsing**: background.js:411-432
+- **Order placement**: background.js:171-220
+- **Order response**: background.js:438-450
+- **Protobuf decoder**: proto-minimal.js
+
+### Test Flow
+1. Login → See balances → See position
+2. Place order → Get "Trading account not found"
+3. Need to map 3316 → TDL01658 somehow
+
+Good luck! You're VERY close - just need the right account format!

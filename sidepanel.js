@@ -116,11 +116,7 @@ function setupEventListeners() {
   // Header actions
   elements.popoutBtn?.addEventListener('click', handlePopout);
   elements.collapseBtn?.addEventListener('click', toggleHeaderCollapse);
-  elements.syncToggle?.addEventListener('click', () => {
-    state.syncEnabled = !state.syncEnabled;
-    updateSyncUI();
-    if (state.syncEnabled) broadcastSymbol();
-  });
+  // Removed sync toggle listener - TradingView integration removed
   elements.disconnectBtn?.addEventListener('click', handleDisconnect);
   
   // Account selector
@@ -163,7 +159,7 @@ function setupEventListeners() {
   elements.symbolInput.addEventListener('input', (e) => {
     state.orderForm.symbol = e.target.value.toUpperCase();
     e.target.value = state.orderForm.symbol;
-    broadcastSymbol();
+    // Removed broadcastSymbol() - TradingView integration removed
   });
   
   elements.quantityInput.addEventListener('input', (e) => {
@@ -195,6 +191,32 @@ function setupEventListeners() {
   
   // Listen for messages from background
   chrome.runtime.onMessage.addListener(handleBackgroundMessage);
+  
+  // Listen for storage changes to update positions/orders in real-time
+  chrome.storage.onChanged.addListener((changes, namespace) => {
+    if (namespace === 'local') {
+      if (changes.volumetricaPositions) {
+        console.log('Positions updated in storage');
+        realPositions.length = 0;
+        realPositions.push(...(changes.volumetricaPositions.newValue || []));
+        updatePositionsDisplay();
+      }
+      
+      if (changes.volumetricaOrders) {
+        console.log('Orders updated in storage');
+        realOrders.length = 0;
+        realOrders.push(...(changes.volumetricaOrders.newValue || []));
+        updateOrdersDisplay();
+      }
+      
+      if (changes.volumetricaAccounts) {
+        console.log('Accounts updated in storage');
+        state.accounts = changes.volumetricaAccounts.newValue || [];
+        updateAccountUI();
+        updateAccountDropdown();
+      }
+    }
+  });
 }
 
 function setupKeyboardShortcuts() {
@@ -404,6 +426,7 @@ async function handleOrder(side) {
         type: 'placeOrder',
         accountId: account.id,
         accountName: account.name,
+        accountNo: account.accountNo, // Add actual account number
         order: {
           symbol: state.orderForm.symbol,
           side: side.toLowerCase(),
@@ -457,21 +480,7 @@ async function handleOrder(side) {
       alert('All orders failed');
     }
     
-    // Draw limit order line on TradingView chart
-    if (state.orderForm.orderType === 'LMT' && successCount > 0) {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs.length && tabs[0].url.includes('tradingview.com')) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            type: 'drawLimitOrderLine',
-            symbol: state.orderForm.symbol,
-            price: parseFloat(state.orderForm.price),
-            side: side
-          }).catch(err => {
-            console.log('Could not send to TradingView:', err);
-          });
-        }
-      });
-    }
+    // Removed TradingView limit order line drawing
     
     setTimeout(() => {
       button.textContent = side;
@@ -532,21 +541,7 @@ function updatePositionsDisplay() {
     elements.positionsEmpty.style.display = 'none';
     elements.positionsList.style.display = 'block';
     
-    // Send position updates to TradingView
-    state.positions.forEach(position => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (tabs.length && tabs[0].url.includes('tradingview.com')) {
-          chrome.tabs.sendMessage(tabs[0].id, {
-            type: 'updatePosition',
-            symbol: position.symbol,
-            quantity: position.quantity,
-            avgPrice: position.avgPrice
-          }).catch(err => {
-            console.log('Could not update position on TradingView:', err);
-          });
-        }
-      });
-    });
+    // Removed TradingView position updates
     
     elements.positionsList.innerHTML = state.positions.map(position => `
       <div class="position-item">
@@ -594,8 +589,8 @@ function updateOrdersDisplay() {
           <div class="order-header">
             <div style="display: flex; align-items: center; gap: 6px;">
               ${statusIcon}
-              <span class="order-symbol">${order.symbol}</span>
-              <span class="order-side ${order.side.toLowerCase()}">${order.side}</span>
+              <span class="order-symbol">${order.symbol || 'MNQ'}</span>
+              <span class="order-side ${order.side ? order.side.toLowerCase() : order.PendingQty < 0 ? 'sell' : 'buy'}">${order.side || (order.PendingQty < 0 ? 'SELL' : 'BUY')}</span>
             </div>
             <div class="order-actions">
               <button class="btn-mini" onclick="editOrder('${order.id}')">
@@ -607,11 +602,11 @@ function updateOrdersDisplay() {
             </div>
           </div>
           <div class="order-details">
-            <span>${order.quantity} @ ${order.orderType}</span>
-            ${order.price ? `<span>$${order.price.toFixed(2)}</span>` : ''}
+            <span>${order.quantity || Math.abs(order.PendingQty || 0)} @ ${order.orderType || 'MKT'}</span>
+            ${order.price || order.OrderPrice ? `<span>$${(order.price || order.OrderPrice || 0).toFixed(2)}</span>` : ''}
           </div>
           <div class="order-details" style="margin-top: 2px;">
-            <span>${order.timestamp.toLocaleTimeString()}</span>
+            <span>${order.timestamp ? (order.timestamp instanceof Date ? order.timestamp.toLocaleTimeString() : new Date(order.timestamp).toLocaleTimeString()) : 'N/A'}</span>
             ${order.accountName ? `<span style="color: var(--muted-foreground);"> • ${order.accountName}</span>` : ''}
           </div>
         </div>
@@ -870,26 +865,9 @@ window.cancelOrder = (orderId) => {
   // TODO: Implement cancel order
 };
 
-// Chart sync functions
-function updateSyncUI() {
-  elements.syncToggle.classList.toggle('active', state.syncEnabled);
-}
+// Removed TradingView sync functions
 
-function broadcastSymbol() {
-  if (!state.syncEnabled || !state.orderForm.symbol) return;
-  
-  chrome.tabs.query({ url: '*://*.tradingview.com/*' }, (tabs) => {
-    tabs.forEach(tab => {
-      chrome.tabs.sendMessage(tab.id, {
-        type: 'setSymbol',
-        symbol: state.orderForm.symbol
-      }).catch(err => {
-        // Tab might not have content script loaded yet
-        console.log('Could not send symbol to TradingView tab:', err);
-      });
-    });
-  });
-}
+// Removed broadcastSymbol function - TradingView integration removed
 
 // Copy trading functions
 function updateCopyTradingUI() {

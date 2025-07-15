@@ -9,10 +9,11 @@ const PLT_KEY = 'URAp7b9wbmUCr0J7IieMaUoIe60ixtgchejOWjFJeQi7jrAlSfQNuyaDebgloot
 
 // Contract ID mapping (will be stored in chrome.storage)
 const DEFAULT_CONTRACTS = {
-  'ES': 12345,   // E-mini S&P 500
-  'NQ': 12346,   // E-mini NASDAQ
-  'YM': 12347,   // E-mini Dow
-  'RTY': 12348   // E-mini Russell
+  'ES': 12345,   // E-mini S&P 500 (TODO: Get real ID)
+  'NQ': 12346,   // E-mini NASDAQ (TODO: Get real ID)
+  'MNQ': 589106,  // Micro E-mini NASDAQ (from position data)
+  'YM': 12347,   // E-mini Dow (TODO: Get real ID)
+  'RTY': 12348   // E-mini Russell (TODO: Get real ID)
 };
 
 // State
@@ -22,6 +23,8 @@ let ws = null;
 let isConnected = false;
 let heartbeatInterval = null;
 let balanceLogged = false;
+let positionUpdateCount = 0;
+let orderUpdateCount = 0;
 
 // Message handler
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -47,8 +50,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       break;
       
     case 'placeOrder':
-      // Handle order placement from TradingView widget
-      handlePlaceOrder(request.order)
+      // Handle order placement from UI
+      // Use account from request or default
+      const accountNo = request.accountNo || currentAccountNo;
+      handlePlaceOrder(request.order, accountNo)
         .then(result => sendResponse(result))
         .catch(error => sendResponse({ success: false, error: error.message }));
       return true; // Keep channel open for async response
@@ -161,23 +166,34 @@ function stopHeartbeat() {
 
 let nextSeqId = 1;
 let currentAccountNo = null;
+let accountNumbers = []; // Store all account numbers
+let accountMapping = {}; // Map internal account numbers to external IDs (e.g., 3316 -> "TDL01658")
 
-async function handlePlaceOrder(order) {
-  console.log('Placing order:', order);
+async function handlePlaceOrder(order, accountNo) {
+  console.log('Placing order:', order, 'on account:', accountNo);
   
   if (!isConnected || !ws) {
+    console.error('Not connected to trading platform', { isConnected, ws: !!ws });
     throw new Error('Not connected to trading platform');
   }
   
   // Get contract ID for symbol
+  console.log('Getting contract ID for symbol:', order.symbol);
   const contracts = await chrome.storage.local.get('contracts');
+  console.log('Available contracts:', contracts.contracts);
   const contractId = contracts.contracts?.[order.symbol];
   
   if (!contractId) {
+    console.error(`No contract ID found for ${order.symbol}. Available:`, Object.keys(contracts.contracts || {}));
     throw new Error(`No contract ID found for ${order.symbol}`);
   }
+  console.log('Found contract ID:', contractId);
   
   try {
+    // Log the account number being used
+    console.log(`Using account number: ${accountNo} for order placement`);
+    console.log(`Available account mapping:`, accountMapping);
+    
     const orderMsg = {
       Order: [{
         OrderInsert: {
@@ -185,25 +201,28 @@ async function handlePlaceOrder(order) {
           SeqClientId: nextSeqId++,
           Quantity: order.side === 'sell' ? -Math.abs(order.quantity) : Math.abs(order.quantity),
           Price: order.price || 0,
-          OrdType: order.orderType === 'limit' ? 1 : 0, // 0=Market, 1=Limit
-          AccNumber: currentAccountNo || 0,
+          OrderType: order.orderType === 'limit' ? 1 : 0, // 0=Market, 1=Limit
+          AccNumber: accountNo || currentAccountNo || 0, // Use the numeric account ID
           Source: 0 // Manual
         }
       }]
     };
     
+    console.log('Encoding order message...');
     const buffer = ProtoMinimal.encodeClientRequest(orderMsg);
+    console.log('Sending order to WebSocket...');
     ws.send(buffer);
     
-    console.log('Order sent to Volumetrica:', orderMsg);
+    console.log('Order sent to Volumetrica:', JSON.stringify(orderMsg, null, 2));
     
     return {
       success: true,
       orderId: 'ORD-' + (nextSeqId - 1),
-      message: `${order.side.toUpperCase()} ${order.quantity} ${order.symbol} @ ${order.orderType.toUpperCase()}`
+      message: `${String(order.side).toUpperCase()} ${order.quantity} ${order.symbol} @ ${String(order.orderType).toUpperCase()}`
     };
   } catch (err) {
     console.error('Order placement error:', err);
+    console.error('Error stack:', err.stack);
     throw err;
   }
 }
@@ -263,8 +282,13 @@ async function connectWebSocket(endpoint, token) {
       try {
         const msg = ProtoMinimal.decodeServerResponse(event.data);
         
-        // Skip logging for balance updates after the first one
-        if (msg.messageType === 'BalanceInfo' && balanceLogged) {
+        // Skip logging for balance updates and trade info spam
+        const skipLogging = (msg.messageType === 'BalanceInfo' && balanceLogged) || 
+                           msg.messageType === 'TradeInfo' ||
+                           (msg.messageType === 'PositionInfo' && positionUpdateCount++ > 5) ||
+                           (msg.messageType === 'OrderInfo' && orderUpdateCount++ > 5);
+                           
+        if (skipLogging) {
           // Still process the message, just don't log it
         } else {
           console.log('WebSocket message received, size:', event.data.byteLength);
@@ -293,7 +317,39 @@ async function connectWebSocket(endpoint, token) {
           
           resolve();
         } else if (msg.InfoResp) {
-          console.log('Account/Position data response received');
+          console.log('Account/Position data response received, length:', msg.InfoResp.length);
+          
+          // Log large responses differently
+          if (msg.InfoResp.length > 10000) {
+            console.log('Large InfoResp received, likely contains historical data');
+          }
+          
+          // Check if we have account data
+          if (msg.InfoResp.accounts && msg.InfoResp.accounts.length > 0) {
+            console.log('Accounts found in InfoResp:', msg.InfoResp.accounts);
+            
+            // Build account mapping
+            msg.InfoResp.accounts.forEach(acc => {
+              if (acc.accountNumber && acc.accountHeader) {
+                accountMapping[acc.accountNumber] = acc.accountHeader;
+                console.log(`Account mapping: ${acc.accountNumber} -> ${acc.accountHeader}`);
+              }
+            });
+            
+            // Store accounts for UI
+            const accounts = msg.InfoResp.accounts.map(acc => ({
+              id: acc.accountNumber,
+              name: acc.accountHeader || `Account ${acc.accountNumber}`,
+              balance: 0, // Will be updated from BalanceInfo
+              platform: 'Volumetrica',
+              accountNo: acc.accountNumber,
+              externalId: acc.accountHeader, // Store the external ID
+              isEnabled: acc.isEnabled,
+              isTradingEnabled: acc.isTradingEnabled
+            }));
+            
+            chrome.storage.local.set({ volumetricaAccounts: accounts });
+          }
           
           // Check if we have position data
           if (msg.InfoResp.positions && msg.InfoResp.positions.length > 0) {
@@ -326,6 +382,61 @@ async function connectWebSocket(endpoint, token) {
             chrome.storage.local.set({ volumetricaPositions: positions });
             console.log('Parsed positions:', positions);
           }
+          
+          // Check if we have order data
+          if (msg.InfoResp.orders && msg.InfoResp.orders.length > 0) {
+            console.log(`Found ${msg.InfoResp.orders.length} orders in InfoResp`);
+            
+            // Log first few orders to understand status codes
+            console.log('First 5 orders with status:', msg.InfoResp.orders.slice(0, 5).map(o => ({
+              status: o.status,
+              price: o.price,
+              quantity: o.quantity,
+              side: o.side,
+              orderId: o.orderId
+            })));
+            
+            // Log a few more orders to see status pattern
+            console.log('Orders 5-10 status:', msg.InfoResp.orders.slice(5, 10).map(o => o.status));
+            
+            // Look for orders with futures prices
+            const futuresOrders = msg.InfoResp.orders.filter(o => o.price > 10000);
+            console.log(`Found ${futuresOrders.length} orders with price > 10000 (futures)`);
+            if (futuresOrders.length > 0) {
+              console.log('Futures orders:', futuresOrders);
+              // Store these as the real orders
+              chrome.storage.local.set({ volumetricaOrders: futuresOrders });
+            }
+            
+            // Also log order count by status
+            const statusCounts = {};
+            msg.InfoResp.orders.forEach(o => {
+              statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+            });
+            console.log('Order count by status:', statusCounts);
+            
+            // Filter for active orders only (not filled/cancelled)
+            // Status codes seen: 2, 4, 6, 8, 10, 12, 14...
+            // Let's include status 10 which might be limit orders
+            const activeOrders = msg.InfoResp.orders.filter(o => {
+              return o.status && o.status <= 10; // Changed from < 10 to <= 10
+            });
+            
+            if (activeOrders.length > 0) {
+              console.log('Active orders:', activeOrders);
+              
+              // Also check what statuses 12, 14, etc mean
+              const status12Orders = msg.InfoResp.orders.filter(o => o.status === 12 || o.status === 14);
+              if (status12Orders.length > 0) {
+                console.log('Status 12/14 orders (might be limit orders):', status12Orders.slice(0, 3));
+              }
+              chrome.storage.local.set({ volumetricaOrders: activeOrders });
+            } else {
+              console.log('No active orders found - check status filter!');
+              // Store all orders for now so UI can display them
+              chrome.storage.local.set({ volumetricaOrders: msg.InfoResp.orders.slice(0, 10) });
+            }
+          }
         } else if (msg.BalanceInfo) {
           // Only log first balance update to reduce spam
           if (!balanceLogged) {
@@ -339,18 +450,51 @@ async function connectWebSocket(endpoint, token) {
           // Transform Volumetrica balance data to UI format
           const accounts = msg.BalanceInfo.map((bal, index) => ({
             id: `vol-${bal.accountNo}`,
-            name: `Account ${bal.accountNo}`,
+            name: accountMapping[bal.accountNo] || `Account ${bal.accountNo}`, // Use external ID if available
             balance: bal.balance,
             isLive: true,
             platform: 'Traders Launch',
-            accountNo: bal.accountNo // Keep original account number for order placement
+            accountNo: bal.accountNo, // Keep original account number for order placement
+            externalId: accountMapping[bal.accountNo] // Store the external ID if available
           }));
+          
+          // Store account numbers for order placement
+          accountNumbers = msg.BalanceInfo.map(bal => bal.accountNo);
+          if (!currentAccountNo && accountNumbers.length > 0) {
+            currentAccountNo = accountNumbers[0]; // Default to first account
+            console.log('Set default account for orders:', currentAccountNo);
+          }
           
           // Store accounts for later retrieval
           chrome.storage.local.set({ volumetricaAccounts: accounts });
         } else if (msg.OrderInfo) {
-          console.log('Order update received:', msg.OrderInfo);
-          // TODO: Forward to UI
+          console.log('🎯 Order update received:', msg.OrderInfo);
+          console.log('Raw order data:', JSON.stringify(msg.OrderInfo, null, 2));
+          
+          // Store orders for UI
+          if (msg.OrderInfo && msg.OrderInfo.length > 0) {
+            // Parse order status and add timestamp
+            const ordersWithTimestamp = msg.OrderInfo.map(order => {
+              const state = order.OrderState === 0 ? 'Submitted' : order.OrderState === 1 ? 'Canceled' : order.OrderState === 2 ? 'Error' : 'Unknown';
+              console.log(`Order ${order.OrgClientId}: State=${state}, Pending=${order.PendingQty}, Filled=${order.FilledQty}, AccNumber=${order.AccNumber}`);
+              
+              if (order.OrderState === 2 && order.InfoText) {
+                console.error('❌ Order Error:', order.InfoText);
+                console.error('   Account used:', order.AccNumber || currentAccountNo);
+                console.error('   Available mappings:', accountMapping);
+              }
+              
+              return {
+                ...order,
+                timestamp: new Date(),
+                status: state
+              };
+            });
+            
+            chrome.storage.local.set({ volumetricaOrders: ordersWithTimestamp });
+          }
+        } else if (msg.OrderInfoMsg) {
+          console.log('🎯 OrderInfoMsg received:', msg.OrderInfoMsg);
         } else if (msg.PositionInfo) {
           console.log('Position update received:', msg.PositionInfo);
           console.log('Raw position data:', JSON.stringify(msg.PositionInfo, null, 2));
@@ -360,6 +504,9 @@ async function connectWebSocket(endpoint, token) {
           // TODO: Parse and forward to UI
         } else if (msg.Pong) {
           console.log('Pong received');
+        } else if (msg.TradeInfo) {
+          console.log('Trade/Fill info received:', msg.TradeInfo);
+          // This might be market data or fills, not our pending orders
         }
       } catch (err) {
         console.error('Failed to decode message:', err);
@@ -381,7 +528,7 @@ function requestInitialData() {
       InfoReq: {
         Modes: [1], // Just Account first
         RequestId: 1,
-        SubscriptionEnabled: false // Just get snapshot for testing
+        SubscriptionEnabled: true // Get live updates
       }
     };
     
@@ -393,15 +540,45 @@ function requestInitialData() {
     setTimeout(() => {
       const posMsg = {
         InfoReq: {
-          Modes: [2, 3], // OrdAndPos, Positions
+          Modes: [2, 3, 4], // OrdAndPos, Positions, Orders
           RequestId: 2,
-          SubscriptionEnabled: false // Just get snapshot for testing
+          SubscriptionEnabled: true // Get live updates
         }
       };
       
       const posBuffer = ProtoMinimal.encodeClientRequest(posMsg);
       ws.send(posBuffer);
       console.log('Position/Order request sent');
+      
+      // Also try requesting active orders only
+      setTimeout(() => {
+        const orderMsg = {
+          InfoReq: {
+            Modes: [5], // Active orders only
+            RequestId: 3,
+            SubscriptionEnabled: true
+          }
+        };
+        
+        const orderBuffer = ProtoMinimal.encodeClientRequest(orderMsg);
+        ws.send(orderBuffer);
+        console.log('Active orders request sent (mode 5)');
+      }, 500);
+      
+      // Request just positions to get latest
+      setTimeout(() => {
+        const posOnlyMsg = {
+          InfoReq: {
+            Modes: [3], // Just positions
+            RequestId: 4,
+            SubscriptionEnabled: true
+          }
+        };
+        
+        const posOnlyBuffer = ProtoMinimal.encodeClientRequest(posOnlyMsg);
+        ws.send(posOnlyBuffer);
+        console.log('Position-only request sent (mode 3)');
+      }, 1000);
     }, 1000);
     
   } catch (err) {
@@ -444,11 +621,14 @@ chrome.action.onClicked.addListener((tab) => {
     .catch((error) => console.error('Failed to open side panel:', error));
 });
 
-// Seed contract IDs on startup if not already stored
+// Seed contract IDs on startup
 chrome.storage.local.get('contracts', (result) => {
-  if (!result.contracts) {
-    chrome.storage.local.set({ contracts: DEFAULT_CONTRACTS });
-    console.log('Seeded default contract IDs');
+  // Always update to include MNQ if it's missing
+  const existingContracts = result.contracts || {};
+  if (!existingContracts.MNQ) {
+    const updatedContracts = { ...existingContracts, ...DEFAULT_CONTRACTS };
+    chrome.storage.local.set({ contracts: updatedContracts });
+    console.log('Updated contract IDs, added MNQ');
   }
 });
 

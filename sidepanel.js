@@ -6,42 +6,8 @@ let state = {
   accountDropdownOpen: false,
   syncEnabled: true, // NEW - panel dictates TradingView symbol
   copyTradingEnabled: false, // Copy trading across all live accounts
-  selectedAccount: {
-    id: 'acc-001',
-    name: 'Trading Account',
-    balance: 125430.50,
-    isLive: true
-  },
-  accounts: [
-    {
-      id: 'acc-001',
-      name: 'Trading Account',
-      balance: 125430.50,
-      isLive: true,
-      platform: 'Traders Launch'
-    },
-    {
-      id: 'acc-002',
-      name: 'Paper Trading',
-      balance: 100000.00,
-      isLive: false,
-      platform: 'Traders Launch'
-    },
-    {
-      id: 'acc-003',
-      name: 'Live Account 2',
-      balance: 75250.00,
-      isLive: true,
-      platform: 'Traders Launch'
-    },
-    {
-      id: 'acc-004',
-      name: 'Live Account 3',
-      balance: 200000.00,
-      isLive: true,
-      platform: 'Traders Launch'
-    }
-  ],
+  selectedAccount: null,
+  accounts: [],
   orderForm: {
     symbol: 'ES',
     quantity: 1,
@@ -57,22 +23,12 @@ let state = {
 };
 
 // Mock data
-const mockPositions = [
-  { symbol: 'ES', quantity: 5, avgPrice: 5294.75, currentPrice: 5298.25, pnl: 875.00, pnlPercent: 0.66 },
-  { symbol: 'NQ', quantity: -2, avgPrice: 18245.50, currentPrice: 18198.75, pnl: 935.00, pnlPercent: 1.28 },
-  { symbol: 'YM', quantity: 3, avgPrice: 42850.00, currentPrice: 42798.00, pnl: -156.00, pnlPercent: -0.12 },
-  { symbol: 'RTY', quantity: 1, avgPrice: 2245.80, currentPrice: 2251.40, pnl: 280.00, pnlPercent: 0.25 }
-];
+// Real data from Volumetrica - will be populated via messages
+const realPositions = [];
 
-const mockOrders = [
-  { id: '1', symbol: 'ES', side: 'BUY', quantity: 2, orderType: 'LMT', price: 5290.00, status: 'PENDING', timestamp: new Date() },
-  { id: '2', symbol: 'NQ', side: 'SELL', quantity: 1, orderType: 'LMT', price: 18250.00, status: 'PARTIAL', timestamp: new Date() }
-];
+const realOrders = [];
 
-const mockFills = [
-  { id: '1', symbol: 'ES', side: 'BUY', quantity: 5, price: 5294.75, timestamp: new Date(Date.now() - 3600000) },
-  { id: '2', symbol: 'NQ', side: 'SELL', quantity: 2, price: 18245.50, timestamp: new Date(Date.now() - 7200000) }
-];
+const realFills = [];
 
 // DOM Elements
 const elements = {};
@@ -348,6 +304,12 @@ function selectAccount(optionElement) {
 }
 
 function updateAccountUI() {
+  if (!state.selectedAccount) {
+    elements.accountName.textContent = 'No Account';
+    elements.accountBalance.textContent = '$0';
+    return;
+  }
+  
   elements.accountName.textContent = state.selectedAccount.name;
   elements.accountBalance.textContent = `$${state.selectedAccount.balance.toLocaleString('en-US', { minimumFractionDigits: 0 })}`;
   
@@ -358,6 +320,30 @@ function updateAccountUI() {
   } else {
     statusDot.classList.remove('live');
   }
+}
+
+function updateAccountDropdown() {
+  // Clear existing account options (except header and add button)
+  const existingOptions = elements.accountDropdown.querySelectorAll('.account-option:not(.add-account-option)');
+  existingOptions.forEach(option => option.remove());
+  
+  // Add each account from state
+  state.accounts.forEach(account => {
+    const option = document.createElement('div');
+    option.className = 'account-option';
+    option.dataset.accountId = account.id;
+    option.innerHTML = `
+      <div class="status-dot ${account.isLive ? 'live' : ''}"></div>
+      <div class="account-details">
+        <div class="account-name">${account.name}</div>
+        <div class="account-balance">$${account.balance.toLocaleString('en-US', { minimumFractionDigits: 0 })}</div>
+        <div class="account-platform">${account.platform}</div>
+      </div>
+    `;
+    
+    // Insert before the "Add Account" button
+    elements.accountDropdown.insertBefore(option, elements.addAccountOption);
+  });
 }
 
 
@@ -536,7 +522,7 @@ function switchTab(tabName) {
 // Display updates
 function updatePositionsDisplay() {
   // Use mock data when connected
-  state.positions = state.connected ? mockPositions : [];
+  state.positions = realPositions;
   elements.positionsCount.textContent = state.positions.length;
   
   if (state.positions.length === 0) {
@@ -588,10 +574,8 @@ function updatePositionsDisplay() {
 }
 
 function updateOrdersDisplay() {
-  // Use mock data when connected
-  if (state.connected && state.orders.length === 0) {
-    state.orders = mockOrders;
-  }
+  // Use real data from Volumetrica
+  state.orders = realOrders;
   
   elements.ordersCount.textContent = state.orders.length;
   
@@ -637,8 +621,8 @@ function updateOrdersDisplay() {
 }
 
 function updateFillsDisplay() {
-  // Use mock data when connected
-  state.fills = state.connected ? mockFills : [];
+  // Use real data from Volumetrica
+  state.fills = realFills;
   elements.fillsCount.textContent = state.fills.length;
   
   if (state.fills.length === 0) {
@@ -756,6 +740,7 @@ function showLoginView() {
 function showTradingView() {
   elements.loginView.classList.add('hidden');
   elements.tradingView.classList.remove('hidden');
+  updateAccountDropdown();
 }
 
 // Connection management

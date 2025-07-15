@@ -36,7 +36,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     case 'getStatus':
       sendResponse({
         connected: isConnected,
-        accountInfo: { accountNo: 'TEST123', balance: 0, position: 0, pnl: 0 }
+        accountInfo: currentAccountNo ? { accountNo: currentAccountNo } : null
       });
       break;
       

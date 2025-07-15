@@ -6,7 +6,11 @@
 ## 📊 Current Progress
 - ✅ **Step 0: Pre-flight** - COMPLETE
 - ✅ **Step 1: WebSocket & Auth** - COMPLETE ✨
-- ⏳ **Step 2: Live Data Feed** - Starting now
+- ✅ **Step 2: Live Data Feed** - Account data working! 🎉
+  - ✅ BalanceInfo parsing - showing real account balances
+  - ✅ Account switching in UI
+  - ⏳ Positions parsing
+  - ⏳ Orders parsing
 - ⬜ **Step 3: Order Placement**
 - ⬜ **Step 4: Minimal Resilience**
 - ⬜ **Step 5: QA & Ship**

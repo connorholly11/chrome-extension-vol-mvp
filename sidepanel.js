@@ -706,15 +706,19 @@ async function handleLogin(e) {
     
     if (response && response.success) {
       state.connected = true;
+      
+      // Wait a moment for accounts to be stored, then load them
+      setTimeout(async () => {
+        const stored = await chrome.storage.local.get('volumetricaAccounts');
+        if (stored.volumetricaAccounts && stored.volumetricaAccounts.length > 0) {
+          state.accounts = stored.volumetricaAccounts;
+          state.selectedAccount = state.accounts[0];
+          updateAccountUI();
+          updateAccountDropdown();
+        }
+      }, 1000);
+      
       showTradingView();
-      
-      // Get initial account status
-      const statusResponse = await chrome.runtime.sendMessage({ type: 'getStatus' });
-      if (statusResponse && statusResponse.accountInfo) {
-        state.selectedAccount.balance = statusResponse.accountInfo.balance || state.selectedAccount.balance;
-        updateAccountUI();
-      }
-      
       updateUI();
     } else {
       showLoginError(response?.error || 'Connection failed');
@@ -749,10 +753,16 @@ async function checkConnectionStatus() {
     const response = await chrome.runtime.sendMessage({ type: 'getStatus' });
     if (response && response.connected) {
       state.connected = true;
-      if (response.accountInfo) {
-        // Update account info from real data
-        state.selectedAccount.balance = response.accountInfo.balance || state.selectedAccount.balance;
+      
+      // Load accounts from storage
+      const stored = await chrome.storage.local.get('volumetricaAccounts');
+      if (stored.volumetricaAccounts && stored.volumetricaAccounts.length > 0) {
+        state.accounts = stored.volumetricaAccounts;
+        state.selectedAccount = state.accounts[0];
+        updateAccountUI();
+        updateAccountDropdown();
       }
+      
       showTradingView();
       updateUI();
     } else {

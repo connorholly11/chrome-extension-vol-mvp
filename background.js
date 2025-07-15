@@ -293,6 +293,11 @@ async function connectWebSocket(endpoint, token) {
         } else if (msg.BalanceInfo) {
           console.log('Balance update received:', msg.BalanceInfo);
           
+          // Log the actual data we're getting
+          msg.BalanceInfo.forEach((bal, i) => {
+            console.log(`Account ${i}: accountNo=${bal.accountNo}, balance=${bal.balance}`);
+          });
+          
           // Transform Volumetrica balance data to UI format
           const accounts = msg.BalanceInfo.map((bal, index) => ({
             id: `vol-${bal.accountNo}`,
@@ -303,16 +308,21 @@ async function connectWebSocket(endpoint, token) {
             accountNo: bal.accountNo // Keep original account number for order placement
           }));
           
-          // Forward to UI
-          chrome.runtime.sendMessage({
-            type: 'accounts:update',
-            accounts: accounts
-          }).catch(() => {});
+          // Store accounts for later retrieval
+          chrome.storage.local.set({ volumetricaAccounts: accounts });
           
           // If we have accounts but no selected account, select the first one
           if (accounts.length > 0 && !currentAccountNo) {
             currentAccountNo = accounts[0].accountNo;
           }
+          
+          // Try to send to all tabs/windows
+          chrome.runtime.sendMessage({
+            type: 'accounts:update', 
+            accounts: accounts
+          }).catch(err => {
+            console.log('Failed to send accounts update:', err);
+          });
         } else if (msg.OrderInfo) {
           console.log('Order update received:', msg.OrderInfo);
           // TODO: Forward to UI

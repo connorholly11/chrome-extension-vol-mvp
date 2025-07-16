@@ -5,10 +5,10 @@
 > **Goal: Replace every mock with live Volumetrica data, place real orders, ship.**  
 > **Scope cuts:** No FINRA archiving, no elaborate security vaults, no copy-trading polish. Just make it work.
 
-## 🎯 Quick Status (2025-07-15)
-- **Working**: Auth ✅, Positions ✅, Balances ✅, WebSocket ✅
-- **Blocked**: Order placement - account ID format mismatch
-- **Next Step**: Find where API provides external account ID (TDL01658)
+## 🎯 Quick Status (2025-07-15 - Updated)
+- **Working**: Auth ✅, Positions ✅, Balances ✅, WebSocket ✅, **ORDER PLACEMENT ✅** 🎉
+- **Mystery**: Why does `sint64` field work with regular varint encoding?
+- **Next Step**: Understand the encoding issue, then get real contract IDs
 
 ## 📊 Current Progress
 - ✅ **Step 0: Pre-flight** - COMPLETE
@@ -454,34 +454,100 @@ All requests MUST be wrapped in `ClientRequestMsg`:
 
 ---
 
-## 📊 Session Progress Log (2025-07-15)
+## 📊 Session Progress Log (2025-07-15 - Evening Session)
 
-### Started With
-- Successful WebSocket connection
-- Mock data still in UI
-- Basic protobuf parsing
+### Started With From Previous Session
+- WebSocket connected but orders failing with "Trading account not found"
+- Account number mismatch: API returns 3316, Volumetrica UI shows TDL01658
+- Positions working, balances working, but couldn't place orders
+- UI error: "order.side.toLowerCase is not a function"
 
-### Accomplished
-1. ✅ Removed ALL mock data
-2. ✅ Fixed protobuf field parsing (doubles vs varints)
-3. ✅ Live position updates working
-4. ✅ Real account balances showing
-5. ✅ Order placement reaches server
-6. ✅ Removed all TradingView integration
-7. ✅ Added real-time UI updates
+### What We Tried & Learned
 
-### Discovered Issues
-1. **Account ID Format** - 3316 vs TDL01658 (blocker!)
-2. **Order Data Strange** - 20,482 orders with tiny prices
-3. **Contract IDs** - Only MNQ (589106) is real, others are placeholders
+#### 1. Account Mapping Discovery ✅
+- Found that `AccountHeaderMsg` in InfoResp (mode 1) contains BOTH:
+  - `accountNumber` (field 1): 3316 - internal ID
+  - `accountHeader` (field 2): "TDL01658" - external ID
+- Successfully parsed and stored mapping: `accountMapping[3316] = "TDL01658"`
+- **Learning**: The API provides both IDs, we just needed to parse AccountHeaderMsg properly
 
-### Time Spent
-- ~3 hours debugging order placement
-- ~1 hour removing TradingView
-- ~2 hours on protobuf parsing
+#### 2. Order Placement Debugging 🔍
+- Added extensive logging to see raw bytes and field parsing
+- Fixed UI error by adding null checks for order.side
+- Fixed OrderInfo AccNumber parsing (field 14, not 16)
+- Added timestamp to orders since Volumetrica doesn't provide it
 
-### Recommendation for Next Session
-**Start with AccountHeaderMsg parsing** - This likely contains the mapping between internal (3316) and external (TDL01658) account identifiers. Once you have the right account format, orders should work immediately since everything else is correct!
+#### 3. The Encoding Mystery 🤔
+- Proto definition says `sint64 AccNumber` which should use zigzag encoding
+- Tried `encodeSInt64` with zigzag - got wrong values (6632)
+- Switched to regular `encodeVarint` - worked perfectly (3316)!
+- **Raw bytes**: `30 f4 19` = field 6, value 3316 ✅
+- **Orders now go through successfully!** 🎉
+
+### What's Currently Working
+1. ✅ Full authentication flow with Volumetrica
+2. ✅ Real-time account balances (2 accounts: 3316 and 4530)
+3. ✅ Real-time position updates (MNQ position shows correctly)
+4. ✅ Account switching in UI
+5. ✅ **Market order placement** (tested with MNQ, orders appear in Volumetrica)
+6. ✅ Order status updates with error messages
+7. ✅ All mock data removed - 100% live data
+
+### Mysteries We Need to Understand 🤷
+
+#### 1. Why does sint64 work with regular encoding?
+- Proto says `sint64 AccNumber` but zigzag encoding fails
+- Regular varint encoding works perfectly
+- Possible reasons:
+  - Server implementation differs from standard protobuf?
+  - Proto file outdated?
+  - Custom protobuf handling?
+
+#### 2. The 20,482 Strange Orders
+- Prices like 0.5, 1, 2 (not futures prices)
+- Exactly 2 orders per status code
+- Mode 5 (active orders) returns empty
+- Are these test data? Different account?
+
+#### 3. Contract ID Mapping
+- Only MNQ (589106) is real from position data
+- ES, NQ, YM, RTY using placeholder IDs (12345, etc.)
+- Need to discover real contract IDs
+
+### Code Changes Made This Session
+
+1. **proto-minimal.js**:
+   - Added AccountHeaderMsg parsing in InfoResp (lines 212-268)
+   - Fixed OrderInfo AccNumber field (14 not 16)
+   - Added field logging for debugging
+   - Changed AccNumber encoding from sint64 to regular varint
+
+2. **background.js**:
+   - Added account mapping storage (line 28)
+   - Store mapping when parsing accounts (lines 333-337)
+   - Enhanced order error logging (lines 479-490)
+   - Added raw bytes logging for orders
+
+3. **sidepanel.js**:
+   - Fixed order.side null check (line 593)
+   - Orders now handle missing timestamp gracefully
+
+### Critical Discoveries 🔑
+
+1. **Account Format NOT the Issue**:
+   - We thought we needed to send "TDL01658" instead of 3316
+   - Actually, the numeric ID (3316) works fine!
+   - The issue was encoding, not the account format
+
+2. **Encoding is Critical**:
+   - Even though proto says sint64, use regular varint
+   - This suggests custom server implementation
+   - Need to be careful with other sint64 fields
+
+3. **OrderInfo Response**:
+   - Always returns AccNumber: 1 in errors (might be error code?)
+   - Real account validation happens server-side
+   - Error messages are helpful ("Trading account not found")
 
 ---
 
@@ -502,7 +568,7 @@ All requests MUST be wrapped in `ClientRequestMsg`:
 
 ---
 
-## 🚨 SUMMARY FOR NEXT DEVELOPER (Updated 2025-07-15)
+## 🚨 SUMMARY FOR NEXT DEVELOPER (Updated 2025-07-15 Evening)
 
 ### What's Working ✅
 1. **Authentication** - Connects to Volumetrica successfully
@@ -510,62 +576,76 @@ All requests MUST be wrapped in `ClientRequestMsg`:
 3. **Positions** - Live position updates working (MNQ shows in UI)
 4. **WebSocket** - Binary protobuf communication with subscriptions
 5. **UI Updates** - Real-time data flow via Chrome storage listeners
-6. **Order Placement** - Message structure correct, orders reach Volumetrica
+6. **Order Placement** - **WORKING NOW!** Market orders go through! 🎉
 7. **Protobuf Parsing** - Custom proto-minimal.js handles all message types
 8. **TradingView Integration** - Completely removed, no more errors
+9. **Account Mapping** - Found how to map 3316 → TDL01658
 
-### What's NOT Working ❌
-1. **Account Number Mismatch** 🚨 CRITICAL ISSUE!
-   - API returns: 3316, 4530 (internal account numbers)
-   - Volumetrica expects: TDL01658 (external account code)
-   - Orders fail with: "Trading account not found"
+### What's NOT Working / Unknown ❓
+1. **Encoding Mystery** - Why does sint64 work with regular varint?
 2. **Orders Display** - 20,482 orders with weird data (prices 0.5, 1, 2)
-3. **Order Filtering** - Can't find user's actual futures orders
+3. **Contract IDs** - Only MNQ is real (589106), others are placeholders
+4. **Limit Orders** - Not tested yet
+5. **Order Cancellation** - Not implemented
 
-### 🔥 THE Critical Discovery
-When placing orders, we get **"Trading account not found"** because:
-- BalanceInfo gives us account number `3316`
-- But Volumetrica UI shows `TDL01658`
-- The API expects the TDL format for order placement!
+### 🔥 THE Critical Fix That Made Orders Work
+**Problem**: Orders were failing with "Trading account not found"
+**Root Cause**: NOT the account ID format! It was the encoding!
+**Solution**: 
+```javascript
+// Proto says: sint64 AccNumber
+// Expected: encodeSInt64 (zigzag encoding)
+// What works: encodeVarint (regular encoding)
+parts.push(this.encodeVarint(insert.AccNumber)); // ✅ This works!
+```
 
-### What We Fixed This Session
-1. **Fixed field names**: `OrdType` → `OrderType` (must match proto exactly)
-2. **Added subscription support**: `SubscriptionEnabled: true` for live updates
-3. **Fixed order parsing**: Price/quantity are doubles, not varints
-4. **Added OrderInfo parsing**: Now we see error messages
-5. **Removed all TradingView code**: No more console errors
-6. **Added MNQ contract**: ID 589106 (from position data)
+### Key Learnings This Session
+1. **Account mapping exists**: AccountHeaderMsg provides both IDs
+2. **Numeric ID works**: Don't need "TDL01658", 3316 is fine
+3. **Encoding matters**: Server might not follow standard protobuf
+4. **OrderInfo parsing**: Field 14 has AccNumber, field 15 has error text
 
-### Next Steps (Priority Order)
-1. **Find External Account ID** 🎯
-   - Check AccountHeaderMsg (field 20)
-   - Look for account metadata in InfoResp
-   - Try different InfoReq modes
-   - Search for "TDL" prefix in any message
+### Immediate Next Steps (Priority Order)
 
-2. **Test with Different Account Fields**
+1. **Understand the Encoding Issue** 🔍
+   - Test other sint64 fields to see if they also need regular encoding
+   - Document which fields use standard vs non-standard encoding
+   - This is critical before implementing more features
+
+2. **Get Real Contract IDs** 📊
    ```javascript
-   // Current (failing):
-   AccNumber: 3316
-   
-   // Need to find where to get:
-   AccNumber: "TDL01658"
+   // Current placeholders:
+   'ES': 12345,   // Need real ID
+   'NQ': 12346,   // Need real ID
+   'MNQ': 589106, // ✅ Real (from position)
+   'YM': 12347,   // Need real ID
+   'RTY': 12348   // Need real ID
    ```
 
-3. **Parse Real Orders**
-   - Current orders have prices like 0.5, 1, 2 (not futures)
-   - Need to find where real limit orders are
-   - Status filtering might need adjustment
+3. **Test Limit Orders** 💰
+   - Market orders work, but limit orders not tested
+   - Price field might also have encoding issues
 
-### Code Locations
-- **Account parsing**: background.js:411-432
-- **Order placement**: background.js:171-220
-- **Order response**: background.js:438-450
-- **Protobuf decoder**: proto-minimal.js
+4. **Parse Real Orders** 📋
+   - Understand why we see 20k weird orders
+   - Find where user's actual orders are
+   - Fix order status filtering
 
-### Test Flow
-1. Login → See balances → See position
-2. Place order → Get "Trading account not found"
-3. Need to map 3316 → TDL01658 somehow
+### Code Locations (Key Files)
+- **Account parsing**: background.js:329-352
+- **Order placement**: background.js:193-224
+- **Order encoding**: proto-minimal.js:144-148
+- **Account mapping**: background.js:333-337
 
-Good luck! You're VERY close - just need the right account format!
+### Current Test Flow
+1. Login → ✅ See balances & positions
+2. Place market order → ✅ Order goes through!
+3. Check Volumetrica → ✅ Order appears there
+
+### ⚠️ Before Moving Forward
+We need to understand why sint64 encoding doesn't follow protobuf standard. This could affect:
+- Other message types we haven't tested
+- Future features that use sint64 fields
+- Error handling and edge cases
+
+The extension is very close to complete! Just need to resolve these mysteries and add remaining features.
